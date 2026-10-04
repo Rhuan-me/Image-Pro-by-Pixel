@@ -1,6 +1,3 @@
-Claro. Aqui está a documentação da **Issue/ADR 1.3** pronta para colocar no `README`/Wiki:
-
-````markdown
 # Configuração de Repositório Git e Ambiente de Desenvolvimento de Backend
 
 ## Objetivo
@@ -307,4 +304,3 @@ docker compose up -d
 
 Com isso, a infraestrutura básica necessária para o desenvolvimento dos microsserviços estará disponível localmente.
 
-```
