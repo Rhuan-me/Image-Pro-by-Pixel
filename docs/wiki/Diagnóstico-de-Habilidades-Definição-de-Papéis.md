@@ -9,25 +9,25 @@
 | Competência | Consenso inicial | William | Rhuan | Deividi | Arthur | Victor |
 |---|------------------|---|---|---|---|---|
 | **Frontend** |                  | | | | | |
-| React | I                | | | | | |
-| TypeScript/JavaScript | I                | | | | | |
-| HTML/CSS | B                | | | | | |
-| Consumo de APIs REST | I                | | | | | |
-| Gerenciamento de estado | I                | | | | | |
+| React | I                | |I | | | |
+| TypeScript/JavaScript | I                | | I| | | |
+| HTML/CSS | B                | | I| | | |
+| Consumo de APIs REST | I                | | I| | | |
+| Gerenciamento de estado | I                | |I | | | |
 | **Backend** |                  | | | | | |
-| Linguagem principal (a definir no ADR) | I                | | | | | |
-| Framework backend | I                | | | | | |
-| APIs REST | I                | | | | | |
-| Banco de dados | I                | | | | | |
-| Autenticação/autorização | I                | | | | | |
-| Testes | I                | | | | | |
+| Linguagem principal (a definir no ADR) | I                | |I| | | |
+| Framework backend | I                | |I| | | |
+| APIs REST | I                | |I | | | |
+| Banco de dados | I                | |I | | | |
+| Autenticação/autorização | I                | |I | | | |
+| Testes | I                | |I | | | |
 | **Ferramentas e práticas** |                  | | | | | |
-| Git/GitLab | B                | | | | | |
-| Docker | I                | | | | | |
-| CI/CD | I                | | | | | |
-| Testes automatizados | I                | | | | | |
-| Documentação | B                | | | | | |
-| Arquitetura de software | I                | | | | | |
+| Git/GitLab | B                | |I | | | |
+| Docker | I                | |I | | | |
+| CI/CD | I                | | I| | | |
+| Testes automatizados | I                | |I | | | |
+| Documentação | B                | |I | | | |
+| Arquitetura de software | I                | | I| | | |
 
 > "Consenso inicial" = estimativa de que a equipe já trabalhou com essas tecnologias em projetos anteriores. Cada integrante confirma ou corrige na própria coluna. Na versão final, o consolidado será calculado a partir das colunas individuais.
 
@@ -41,12 +41,11 @@
 | Arthur Oliveira | Backend e decisões técnicas, com visão full stack | Analítico |
 | Victor de Paula | Conhecimento amplo de linguagens e frameworks, com domínio do funcionamento interno | Técnico/generalista |
 
-> Observação: Victor consta na wiki (04), mas não no README. Níveis e perfil serão preenchidos por ele após confirmação de participação no grupo.
 
 ### 1.2 Status da autoavaliação
 
 - [ ] William
-- [ ] Rhuan
+- [x] Rhuan
 - [ ] Deividi
 - [ ] Arthur
 - [ ] Victor
