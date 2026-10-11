@@ -8,25 +8,25 @@
 | Competência | Consenso inicial | William | Rhuan | Deividi | Arthur | Victor |
 |---|------------------|---|---|---|---|---|
 | **Frontend** |                  | | | | | B|
-| React | I                | I |I | | | I|
-| TypeScript/JavaScript | I                | I | I| | | I|
-| HTML/CSS | B                | I | I| | | I|
-| Consumo de APIs REST | I                | I | I| | | A|
-| Gerenciamento de estado | I                | B |I | | | I|
+| React | I                | I |I | I | | I|
+| TypeScript/JavaScript | I | I | I| I |  | I|
+| HTML/CSS | B                | I | I| I | | I|
+| Consumo de APIs REST | I                | I | I| I | | A|
+| Gerenciamento de estado | I                | B |I | B | | I|
 | **Backend** |                  | | | | | A|
-| Linguagem principal JavaScript | I                | I |I| | | I|
-| Framework backend | I                | I |I| | | A|
-| APIs REST | I                | I |I | | | A|
-| Banco de dados | I                | I |I | | | A|
-| Autenticação/autorização | I                | I |I | | | A|
-| Testes | I                | I |I | | | I|
+| Linguagem principal JavaScript | I                | I |I| I | | I|
+| Framework backend | I                | I |I| I | | A|
+| APIs REST | I                | I |I | I | | A|
+| Banco de dados | I                | I |I | I | | A|
+| Autenticação/autorização | I                | I |I | I | | A|
+| Testes | I                | I |I | B | | I|
 | **Ferramentas e práticas** |                  | | | | | A|
-| Git/GitLab | B                | I |I | | | A|
-| Docker | I                | I |I | | | I|
-| CI/CD | I                | B | I| | | I|
-| Testes automatizados | I                | I |I | | | I|
-| Documentação | B                | I |I | | | B|
-| Arquitetura de software | I                | I | I| | | I|
+| Git/GitLab | B                | I |I | B | | A|
+| Docker | I                | I |I | B | | I|
+| CI/CD | I                | B | I| B | | I|
+| Testes automatizados | I                | I |I | B | | I|
+| Documentação | B                | I |I | I | | B|
+| Arquitetura de software | I                | I | I| I | | I|
 > "Consenso inicial" = estimativa de que a equipe já trabalhou com essas tecnologias em projetos anteriores. Cada integrante confirma ou corrige na própria coluna. Na versão final, o consolidado será calculado a partir das colunas individuais.
 
 ### 1.1 Perfil observado por integrante
@@ -41,7 +41,7 @@
 ### 1.2 Status da autoavaliação
 - [x] William
 - [x] Rhuan
-- [ ] Deividi
+- [x] Deividi
 - [ ] Arthur
 - [x] Victor
 
