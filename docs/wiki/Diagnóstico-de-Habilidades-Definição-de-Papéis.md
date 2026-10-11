@@ -7,26 +7,26 @@
 ## 1. Matriz de habilidades atuais
 | Competência | Consenso inicial | William | Rhuan | Deividi | Arthur | Victor |
 |---|------------------|---|---|---|---|---|
-| **Frontend** |                  | | | | | |
-| React | I                | I |I | | | |
-| TypeScript/JavaScript | I                | I | I| | | |
-| HTML/CSS | B                | I | I| | | |
-| Consumo de APIs REST | I                | I | I| | | |
-| Gerenciamento de estado | I                | B |I | | | |
-| **Backend** |                  | | | | | |
-| Linguagem principal (a definir no ADR) | I                | I |I| | | |
-| Framework backend | I                | I |I| | | |
-| APIs REST | I                | I |I | | | |
-| Banco de dados | I                | I |I | | | |
-| Autenticação/autorização | I                | I |I | | | |
-| Testes | I                | I |I | | | |
-| **Ferramentas e práticas** |                  | | | | | |
-| Git/GitLab | B                | I |I | | | |
-| Docker | I                | I |I | | | |
-| CI/CD | I                | B | I| | | |
-| Testes automatizados | I                | I |I | | | |
-| Documentação | B                | I |I | | | |
-| Arquitetura de software | I                | I | I| | | |
+| **Frontend** |                  | | | | | B|
+| React | I                | I |I | | | I|
+| TypeScript/JavaScript | I                | I | I| | | I|
+| HTML/CSS | B                | I | I| | | I|
+| Consumo de APIs REST | I                | I | I| | | A|
+| Gerenciamento de estado | I                | B |I | | | I|
+| **Backend** |                  | | | | | A|
+| Linguagem principal JavaScript | I                | I |I| | | I|
+| Framework backend | I                | I |I| | | A|
+| APIs REST | I                | I |I | | | A|
+| Banco de dados | I                | I |I | | | A|
+| Autenticação/autorização | I                | I |I | | | A|
+| Testes | I                | I |I | | | I|
+| **Ferramentas e práticas** |                  | | | | | A|
+| Git/GitLab | B                | I |I | | | A|
+| Docker | I                | I |I | | | I|
+| CI/CD | I                | B | I| | | I|
+| Testes automatizados | I                | I |I | | | I|
+| Documentação | B                | I |I | | | B|
+| Arquitetura de software | I                | I | I| | | I|
 > "Consenso inicial" = estimativa de que a equipe já trabalhou com essas tecnologias em projetos anteriores. Cada integrante confirma ou corrige na própria coluna. Na versão final, o consolidado será calculado a partir das colunas individuais.
 
 ### 1.1 Perfil observado por integrante
@@ -43,7 +43,7 @@
 - [x] Rhuan
 - [ ] Deividi
 - [ ] Arthur
-- [ ] Victor
+- [x] Victor
 
 ## 2. Novas competências necessárias
 | # | Tecnologia / conhecimento | Motivo | Nível esperado | Quem precisa | Dependências |
