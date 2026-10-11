@@ -61,4 +61,4 @@ Para mais detalhes sobre o ambiente, consulte a [ADR-003](docs/adrs/ADR-003-estr
 - **William Schreiner** — *Scrum Master*
 - **Rhuan** — *Developer*
 - **Deividi Santos** — *Developer*
-- **Camelodev** — *Developer*
+- **Arthur Oliveira** — *Developer*
