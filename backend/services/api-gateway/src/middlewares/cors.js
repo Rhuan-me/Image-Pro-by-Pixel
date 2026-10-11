@@ -1,28 +1,15 @@
-/**
- * @file cors.js
- * @description Middleware de configuração de Cross-Origin Resource Sharing (CORS).
- */
-
 const cors = require('cors');
-const config = require('../config/environment');
+const { env } = require('../config/env');
 
-const corsMiddleware = cors({
-  origin: (origin, callback) => {
-    // Permite requisições sem origin (como curl, mobile apps ou ferramentas de API)
-    if (!origin || config.cors.origin === '*') {
-      return callback(null, true);
-    }
-
-    const allowedOrigins = config.cors.origin.split(',').map((o) => o.trim());
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-
-    return callback(new Error(`Origem CORS '${origin}' não autorizada pelo API Gateway.`));
+module.exports = cors({
+  origin(origin, callback) {
+    // Requisições sem Origin incluem chamadas server-to-server/health checks.
+    if (!origin || env.corsOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Origem não permitida pelo CORS.'));
   },
-  methods: config.cors.methods,
-  allowedHeaders: config.cors.allowedHeaders,
-  credentials: config.cors.credentials,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Correlation-Id'],
+  exposedHeaders: ['X-Correlation-Id'],
+  credentials: true,
+  maxAge: 600
 });
-
-module.exports = corsMiddleware;

@@ -1,35 +1,26 @@
 {
   "name": "@pixpro/api-gateway",
   "version": "1.0.0",
-  "description": "API Gateway de entrada para a plataforma distribuída PixPro",
+  "private": true,
+  "description": "API Gateway do PixPro",
   "main": "src/server.js",
-  "type": "commonjs",
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test tests/**/*.test.js"
+    "test": "node --test tests/*.test.js"
   },
-  "keywords": [
-    "pixpro",
-    "api-gateway",
-    "microservices",
-    "reverse-proxy",
-    "express"
-  ],
-  "author": "Equipe PixPro",
-  "license": "ISC",
+  "engines": { "node": ">=20" },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "rate-limit-redis": "^4.2.0",
     "helmet": "^8.0.0",
     "http-proxy-middleware": "^3.0.3",
-    "morgan": "^1.10.0"
+    "jose": "^5.9.6",
+    "morgan": "^1.10.0",
+    "redis": "^4.7.0"
   },
-  "devDependencies": {
-    "supertest": "^7.0.0"
-  },
-  "engines": {
-    "node": ">=20.0.0"
-  }
+  "devDependencies": { "supertest": "^7.0.0" }
 }

@@ -1,50 +1,28 @@
-/**
- * @file server.js
- * @description Ponto de entrada do API Gateway do PixPro.
- */
+const app = require('./app');
+const { env, validateEnv } = require('./config/env');
+const { redisClient, redisReady } = require('./middlewares/rateLimit');
 
-const createApp = require('./app');
-const config = require('./config/environment');
-
-const app = createApp();
-
-const server = app.listen(config.port, () => {
-  console.log('======================================================');
-  console.log(`PixPro API Gateway rodando na porta ${config.port}`);
-  console.log(`Ambiente: ${config.nodeEnv}`);
-  console.log(`CORS Origin: ${config.cors.origin}`);
-  console.log(`Auth Service Downstream: ${config.services.auth.url}`);
-  console.log(`Project Service Downstream: ${config.services.project.url}`);
-  console.log(`Image Processing Downstream: ${config.services.imageProcessing.url}`);
-  console.log(`Health Check: http://localhost:${config.port}/health`);
-  console.log('======================================================');
-});
-
-// Tratamento de término gracioso (Graceful Shutdown)
-function gracefulShutdown(signal) {
-  console.log(`\nSinal ${signal} recebido. Encerrando o API Gateway de forma graciosa...`);
-  server.close(() => {
-    console.log('Servidor HTTP finalizado.');
-    process.exit(0);
-  });
-
-  // Força encerramento se travar por mais de 10s
-  setTimeout(() => {
-    console.error('Encerramento forçado após timeout.');
+async function start() {
+  try {
+    validateEnv();
+    await redisReady;
+    const server = app.listen(env.port, () => console.log(`PixPro API Gateway ouvindo na porta ${env.port}`));
+    let closing = false;
+    const shutdown = signal => {
+      if (closing) return;
+      closing = true;
+      console.log(`Recebido ${signal}; encerrando Gateway...`);
+      server.close(async () => {
+        try { if (redisClient.isOpen) await redisClient.quit(); }
+        finally { process.exit(0); }
+      });
+      setTimeout(() => process.exit(1), 10000).unref();
+    };
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
+  } catch (error) {
+    console.error('Falha ao iniciar API Gateway:', error.message);
     process.exit(1);
-  }, 10000).unref();
+  }
 }
-
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection:', reason);
-});
-
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
-  process.exit(1);
-});
-
-module.exports = server;
+start();

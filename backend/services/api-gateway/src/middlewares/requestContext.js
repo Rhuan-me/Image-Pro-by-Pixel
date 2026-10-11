@@ -1,15 +1,10 @@
-/**
- * @file requestContext.js
- * @description Middleware para injeção e propagação de Correlation ID para observabilidade distribuída.
- */
+const { randomUUID } = require('node:crypto');
 
-const { randomUUID } = require('crypto');
-
-const requestContextMiddleware = (req, res, next) => {
-  const correlationId = req.headers['x-correlation-id'] || randomUUID();
-  req.correlationId = correlationId;
-  res.setHeader('X-Correlation-Id', correlationId);
+module.exports = function requestContext(req, res, next) {
+  const supplied = req.get('x-correlation-id');
+  // Aceita IDs simples e limitados; nunca propaga strings arbitrárias do cliente.
+  const valid = supplied && supplied.length <= 100 && /^[A-Za-z0-9._:-]+$/.test(supplied);
+  req.correlationId = valid ? supplied : randomUUID();
+  res.setHeader('x-correlation-id', req.correlationId);
   next();
 };
-
-module.exports = requestContextMiddleware;

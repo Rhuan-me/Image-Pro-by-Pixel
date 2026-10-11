@@ -1,45 +1,25 @@
-/**
- * @file app.js
- * @description Fábrica da aplicação Express do API Gateway.
- */
-
 const express = require('express');
 const helmet = require('helmet');
 const corsMiddleware = require('./middlewares/cors');
-const loggingMiddleware = require('./middlewares/logging');
-const requestContextMiddleware = require('./middlewares/requestContext');
+const requestContext = require('./middlewares/requestContext');
+const logger = require('./middlewares/logger');
+const { authMiddleware } = require('./middlewares/auth');
+const { generalLimiter } = require('./middlewares/rateLimit');
 const routes = require('./routes');
-const { notFoundHandler, globalErrorHandler } = require('./middlewares/errorHandler');
+const { notFound, errorHandler } = require('./middlewares/errors');
+const { env } = require('./config/env');
 
-function createApp() {
-  const app = express();
-
-  // 1. Headers de segurança HTTP
-  app.use(helmet());
-
-  // 2. Cross-Origin Resource Sharing (CORS)
-  app.use(corsMiddleware);
-
-  // 3. Contexto de rastreabilidade (Correlation ID)
-  app.use(requestContextMiddleware);
-
-  // 4. Logging de requisições HTTP
-  app.use(loggingMiddleware);
-
-  // 5. Parser leve de JSON apenas para endpoints locais do gateway (rotas de proxy usam streaming direto)
-  app.use(express.json({ limit: '10mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-  // 6. Registro de rotas e proxies reversos
-  app.use('/', routes);
-
-  // 7. Rota não encontrada (404)
-  app.use(notFoundHandler);
-
-  // 8. Tratamento global de erros (500 / exceções não capturadas)
-  app.use(globalErrorHandler);
-
-  return app;
-}
-
-module.exports = createApp;
+const app = express();
+app.disable('x-powered-by');
+app.set('trust proxy', 1);
+app.use(helmet());
+app.use(requestContext);
+app.use(logger);
+app.use(corsMiddleware);
+app.use(generalLimiter);
+// Evita consumir/recriar o body antes do proxy; os microsserviços fazem o parsing.
+app.use(authMiddleware);
+app.use(routes);
+app.use(notFound);
+app.use(errorHandler);
+module.exports = app;
