@@ -1,0 +1,107 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: pixpro-redis
+    command: ["sh", "-c", "redis-server --appendonly yes --requirepass \"$${REDIS_PASSWORD}\""]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-dev-redis-password}
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - pixpro-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: pixpro-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pixpro}
+      POSTGRES_USER: ${POSTGRES_USER:-pixpro}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev-postgres-password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - pixpro-network
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    container_name: pixpro-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-pixpro}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-dev-rabbit-password}
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - pixpro-network
+
+  api-gateway:
+    build:
+      context: ../backend/services/api-gateway
+      dockerfile: Dockerfile
+    container_name: pixpro-api-gateway
+    env_file:
+      - ../backend/services/api-gateway/.env.docker
+    environment:
+      PORT: 8000
+      NODE_ENV: development
+      REDIS_URL: "redis://:${REDIS_PASSWORD:-dev-redis-password}@redis:6379"
+      AUTH_SERVICE_URL: "http://auth-service:3001"
+      PROJECT_SERVICE_URL: "http://project-service:3002"
+      IMAGE_SERVICE_URL: "http://image-processing-service:3003"
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - pixpro-network
+    restart: unless-stopped
+
+  auth-service:
+    build:
+      context: ../backend/services/auth-service
+      dockerfile: Dockerfile
+    container_name: pixpro-auth-service
+    env_file:
+      - ../backend/services/auth-service/.env.example
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      DATABASE_URL: "postgres://${POSTGRES_USER:-pixpro}:${POSTGRES_PASSWORD:-dev-postgres-password}@postgres:5432/${POSTGRES_DB:-pixpro}"
+    ports:
+      - "127.0.0.1:3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - pixpro-network
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+  postgres_data:
+  rabbitmq_data:
+
+networks:
+  pixpro-network:
+    name: pixpro-network
+    driver: bridge
