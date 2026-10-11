@@ -62,3 +62,4 @@ Para mais detalhes sobre o ambiente, consulte a [ADR-003](docs/adrs/ADR-003-estr
 - **Rhuan** — *Developer*
 - **Deividi Santos** — *Developer*
 - **Arthur Oliveira** — *Developer*
+- **Victor de Paula** — *Developer*

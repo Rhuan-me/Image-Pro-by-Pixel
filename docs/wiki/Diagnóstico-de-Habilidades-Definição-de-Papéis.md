@@ -5,34 +5,31 @@
 > **Escala:** **B** = Básico · **I** = Intermediário · **A** = Avançado
 
 ## 1. Matriz de habilidades atuais
-
 | Competência | Consenso inicial | William | Rhuan | Deividi | Arthur | Victor |
 |---|------------------|---|---|---|---|---|
-| **Frontend** |                  | | | | | |
-| React | I                | | | | | |
-| TypeScript/JavaScript | I                | | | | | |
-| HTML/CSS | B                | | | | | |
-| Consumo de APIs REST | I                | | | | | |
-| Gerenciamento de estado | I                | | | | | |
-| **Backend** |                  | | | | | |
-| Linguagem principal (a definir no ADR) | I                | | | | | |
-| Framework backend | I                | | | | | |
-| APIs REST | I                | | | | | |
-| Banco de dados | I                | | | | | |
-| Autenticação/autorização | I                | | | | | |
-| Testes | I                | | | | | |
-| **Ferramentas e práticas** |                  | | | | | |
-| Git/GitLab | B                | | | | | |
-| Docker | I                | | | | | |
-| CI/CD | I                | | | | | |
-| Testes automatizados | I                | | | | | |
-| Documentação | B                | | | | | |
-| Arquitetura de software | I                | | | | | |
-
+| **Frontend** |                  | | | | | |
+| React | I                | I |I | | | |
+| TypeScript/JavaScript | I                | I | I| | | |
+| HTML/CSS | B                | I | I| | | |
+| Consumo de APIs REST | I                | I | I| | | |
+| Gerenciamento de estado | I                | B |I | | | |
+| **Backend** |                  | | | | | |
+| Linguagem principal (a definir no ADR) | I                | I |I| | | |
+| Framework backend | I                | I |I| | | |
+| APIs REST | I                | I |I | | | |
+| Banco de dados | I                | I |I | | | |
+| Autenticação/autorização | I                | I |I | | | |
+| Testes | I                | I |I | | | |
+| **Ferramentas e práticas** |                  | | | | | |
+| Git/GitLab | B                | I |I | | | |
+| Docker | I                | I |I | | | |
+| CI/CD | I                | B | I| | | |
+| Testes automatizados | I                | I |I | | | |
+| Documentação | B                | I |I | | | |
+| Arquitetura de software | I                | I | I| | | |
 > "Consenso inicial" = estimativa de que a equipe já trabalhou com essas tecnologias em projetos anteriores. Cada integrante confirma ou corrige na própria coluna. Na versão final, o consolidado será calculado a partir das colunas individuais.
 
 ### 1.1 Perfil observado por integrante
-
 | Integrante | Ponto forte | Perfil |
 |---|---|---|
 | William Schreiner | Orquestração, organização e tomada de decisão | Analítico e organizacional |
@@ -41,18 +38,14 @@
 | Arthur Oliveira | Backend e decisões técnicas, com visão full stack | Analítico |
 | Victor de Paula | Conhecimento amplo de linguagens e frameworks, com domínio do funcionamento interno | Técnico/generalista |
 
-> Observação: Victor consta na wiki (04), mas não no README. Níveis e perfil serão preenchidos por ele após confirmação de participação no grupo.
-
 ### 1.2 Status da autoavaliação
-
-- [ ] William
-- [ ] Rhuan
+- [x] William
+- [x] Rhuan
 - [ ] Deividi
 - [ ] Arthur
 - [ ] Victor
 
 ## 2. Novas competências necessárias
-
 | # | Tecnologia / conhecimento | Motivo | Nível esperado | Quem precisa | Dependências |
 |---|---|---|---|---|---|
 | 1 | RabbitMQ (exchanges, filas, DLX) | Espinha dorsal da mensageria assíncrona | Intermediária | Backend (todos) | Docker |
@@ -69,7 +62,6 @@
 | 12 | C4 Model / ADRs | Documentação arquitetural | Básica | Arthur, William | — |
 
 ## 3. Curva de aprendizado
-
 | Tecnologia | Nível necessário | Conhecimento atual | Tempo estimado | Esforço | Prioridade | Justificativa |
 |---|---|---|---|---|---|---|
 | Docker Compose / infra | Intermediário | Básico–Intermediário | 6 h | Baixo | Alta | Ambiente base de todos (semanas 1–3) |
@@ -84,11 +76,9 @@
 | Python + ONNX (workers) | Básico | Básico | 15 h | Médio | Média | Inferência; pode usar modelo pronto |
 | Storage S3/MinIO | Básico | Nenhum | 5 h | Baixo | Baixa | Integração simples via SDK |
 | Observabilidade | Básico | Nenhum | 6 h | Baixo | Baixa | Complementar na fase final |
-
 > Tempos estimados por pessoa que precisa aprender, considerando o conhecimento prévio da equipe. Serão revisados após a autoavaliação.
 
 ## 4. Papéis e responsabilidades (proposta inicial, a validar)
-
 | Integrante | Papel principal | Responsabilidades | Tecnologias | Papel secundário | Competências a desenvolver |
 |---|---|---|---|---|---|
 | William Schreiner | Scrum Master / Coordenação | Cerimônias, backlog, integração do time, decisões de escopo | GitLab, Scrum | DevOps (CI/CD, Docker) | AsyncAPI, observabilidade |
@@ -98,7 +88,6 @@
 | Victor de Paula | Backend Developer / Especialista em frameworks | Integração entre serviços, API Gateway, Auth Service, apoio técnico em decisões de stack | Frameworks backend, PostgreSQL, Redis, JWT | Revisão técnica de MRs, apoio em testes | Mensageria (RabbitMQ), CQRS |
 
 ## 5. Justificativa da distribuição
-
 - **William:** perfil organizacional e de decisão se encaixa em Scrum Master; DevOps como apoio mantém ele próximo da infraestrutura sem sobrecarregar o backend.
 - **Arthur:** maior afinidade com backend e decisões técnicas; CQRS e Outbox são as competências de maior curva e impacto arquitetural, então ficam com quem já tem base e visão analítica.
 - **Deividi:** forte em lógica e prática, adequado a workers, idempotência e tratamento de falhas.
@@ -107,7 +96,6 @@
 - **Compartilhamento:** code review cruzado obrigatório (1 aprovação por MR) e pareamento nas tecnologias de maior curva (CQRS, RabbitMQ).
 
 ## 6. Plano inicial de aprendizado
-
 | Ordem | Competência | Quem | Quando |
 |---|---|---|---|
 | 1 | Docker Compose + infra local | Todos | Semanas 1–3 |
@@ -116,4 +104,3 @@
 | 4 | WebSocket + Redis Pub/Sub + AsyncAPI | Backend + Rhuan | Semanas 7–8 |
 | 5 | Resiliência + observabilidade | Backend + William | Semana 9 |
 | 6 | Python/ONNX (em paralelo) | Deividi | Semanas 3–6 |
-
