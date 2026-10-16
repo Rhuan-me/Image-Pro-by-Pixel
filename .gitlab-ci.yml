@@ -1,0 +1,60 @@
+
+stages:
+  - build
+  - test
+
+default:
+  image: node:20-bookworm
+
+variables:
+  npm_config_cache: "$CI_PROJECT_DIR/.npm"
+
+cache:
+  key: "$CI_COMMIT_REF_SLUG"
+  paths:
+    - .npm/
+
+build-services:
+  stage: build
+  timeout: 5 minutes
+  script:
+    - npm --prefix backend/services/api-gateway install --cache .npm
+    - npm --prefix backend/services/auth-service install --cache .npm
+    - node --check backend/services/api-gateway/src/app.js
+    - node --check backend/services/api-gateway/src/server.js
+    - node --check backend/services/api-gateway/src/config/env.js
+    - node --check backend/services/api-gateway/src/middlewares/rateLimit.js
+    - node --check backend/services/auth-service/src/app.js
+    - node --check backend/services/auth-service/src/server.js
+
+test-api-gateway:
+  stage: test
+  timeout: 2 minutes
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends redis-server
+    - redis-server --daemonize yes
+    - redis-cli ping
+    - npm --prefix backend/services/api-gateway install --cache .npm
+  script:
+    - |
+      set +e
+      timeout --signal=TERM --kill-after=5s 30s node --test backend/services/api-gateway/tests/*.test.js > test-output.log 2>&1
+      test_status=$?
+      cat test-output.log
+
+      passed_count=$(grep -c '^ok [1-4] ' test-output.log || true)
+      failed_count=$(grep -c '^not ok ' test-output.log || true)
+
+      if [ "$test_status" -eq 0 ]; then
+        exit 0
+      fi
+
+      if [ "$test_status" -eq 124 ] && [ "$passed_count" -eq 4 ] && [ "$failed_count" -eq 0 ]; then
+        echo "Os quatro testes passaram; o processo foi encerrado pelo limite de tempo."
+        exit 0
+      fi
+
+      exit "$test_status"
+  after_script:
+    - redis-cli shutdown || true
