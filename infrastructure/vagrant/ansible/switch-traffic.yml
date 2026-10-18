@@ -1,0 +1,66 @@
+---
+- name: Redirecionamento Manual de Tráfego Blue-Green via Ansible
+  hosts: managers
+  become: false
+  vars:
+    # Versão de destino: 'green' ou 'blue' (padrão: green)
+    version: green
+
+  tasks:
+    - name: 1. Validar versão informada
+      assert:
+        that:
+          - version in ['blue', 'green']
+        fail_msg: "A versão deve ser 'blue' ou 'green'. Exemplo: -e version=green"
+
+    - name: 2. Definir nomes dinâmicos da configuração
+      set_fact:
+        target_upstream: "web-{{ version }}"
+        new_config_name: "nginx_conf_{{ version }}_{{ ansible_date_time.epoch }}"
+
+    - name: 3. Obter configuração atual em uso pelo reverse-proxy
+      command: >
+        docker service inspect reverse-proxy
+        --format {% raw %}'{{ range .Spec.TaskTemplate.ContainerSpec.Configs }}{{ .ConfigName }}{{ end }}'{% endraw %}
+      register: current_config_query
+      changed_when: false
+
+    - name: 3.1 Registrar nome da configuração anterior
+      set_fact:
+        old_config_name: "{{ current_config_query.stdout | trim }}"
+
+    - name: 4. Gerar nova configuração do Nginx para {{ target_upstream }}
+      template:
+        src: templates/nginx.conf.j2
+        dest: /tmp/nginx_switch.conf
+
+    - name: 5. Criar nova configuração no Docker Swarm
+      command: docker config create {{ new_config_name }} /tmp/nginx_switch.conf
+
+    - name: 6. Atualizar o serviço reverse-proxy com a nova configuração (Switch de Tráfego)
+      command: >
+        docker service update
+        --config-rm {{ old_config_name }}
+        --config-add source={{ new_config_name }},target=/etc/nginx/nginx.conf
+        reverse-proxy
+
+    - name: 7. Aguardar convergência e testar endpoint na porta 80
+      uri:
+        url: http://192.168.56.10
+        return_content: yes
+      register: test_response
+      until: test_response.status == 200
+      retries: 15
+      delay: 2
+
+    - name: 8. Exibir resultado da alternância
+      debug:
+        msg:
+          - "=========================================================="
+          - " Redirecionamento de tráfego concluído com sucesso!"
+          - " Versão ativa no proxy: web-{{ version }}"
+          - " Config anterior removida: {{ old_config_name }}"
+          - " Nova config aplicada: {{ new_config_name }}"
+          - " Resposta atual do cluster (192.168.56.10:80):"
+          - " {{ test_response.content | trim }}"
+          - "=========================================================="

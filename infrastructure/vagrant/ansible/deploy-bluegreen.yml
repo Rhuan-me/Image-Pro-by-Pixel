@@ -1,0 +1,98 @@
+---
+- name: Deploy Blue-Green Infrastructure no Docker Swarm
+  hosts: managers
+  become: false
+  vars:
+    initial_version: blue
+    overlay_network: app-net
+
+  tasks:
+    - name: 1. Verificar se a rede overlay existe
+      command: docker network inspect {{ overlay_network }}
+      register: network_check
+      failed_when: false
+      changed_when: false
+
+    - name: 1.1 Criar a rede overlay caso não exista
+      command: docker network create --driver overlay {{ overlay_network }}
+      when: network_check.rc != 0
+
+    - name: 2. Verificar se o serviço web-blue existe
+      command: docker service inspect web-blue
+      register: blue_check
+      failed_when: false
+      changed_when: false
+
+    - name: 2.1 Criar o serviço web-blue (2 réplicas)
+      command: >
+        docker service create
+        --name web-blue
+        --network {{ overlay_network }}
+        --replicas 2
+        nginx:alpine sh -c "echo '<h1>Versão 1.0 - BLUE</h1>' > /usr/share/nginx/html/index.html && nginx -g 'daemon off;'"
+      when: blue_check.rc != 0
+
+    - name: 3. Verificar se o serviço web-green existe
+      command: docker service inspect web-green
+      register: green_check
+      failed_when: false
+      changed_when: false
+
+    - name: 3.1 Criar o serviço web-green (2 réplicas)
+      command: >
+        docker service create
+        --name web-green
+        --network {{ overlay_network }}
+        --replicas 2
+        nginx:alpine sh -c "echo '<h1>Versão 2.0 - GREEN</h1>' > /usr/share/nginx/html/index.html && nginx -g 'daemon off;'"
+      when: green_check.rc != 0
+
+    - name: 4. Gerar arquivo de configuração inicial do Nginx
+      template:
+        src: templates/nginx.conf.j2
+        dest: /tmp/nginx.conf
+      vars:
+        target_upstream: "web-{{ initial_version }}"
+
+    - name: 5. Verificar se a config nginx_conf_initial existe no Swarm
+      command: docker config inspect nginx_conf_initial
+      register: config_check
+      failed_when: false
+      changed_when: false
+
+    - name: 5.1 Criar config nginx_conf_initial no Swarm
+      command: docker config create nginx_conf_initial /tmp/nginx.conf
+      when: config_check.rc != 0
+
+    - name: 6. Verificar se o serviço reverse-proxy existe
+      command: docker service inspect reverse-proxy
+      register: proxy_check
+      failed_when: false
+      changed_when: false
+
+    - name: 6.1 Criar o serviço reverse-proxy publicando a porta 80
+      command: >
+        docker service create
+        --name reverse-proxy
+        --network {{ overlay_network }}
+        --publish published=80,target=80
+        --config source=nginx_conf_initial,target=/etc/nginx/nginx.conf
+        nginx:alpine
+      when: proxy_check.rc != 0
+
+    - name: 7. Aguardar serviço responder na porta 80
+      uri:
+        url: http://192.168.56.10
+        return_content: yes
+      register: health_check
+      until: health_check.status == 200
+      retries: 15
+      delay: 2
+
+    - name: 8. Exibir status da implantação
+      debug:
+        msg:
+          - "=========================================================="
+          - " Implantação Blue-Green concluída com sucesso via Ansible!"
+          - " Resposta da porta 80: {{ health_check.content | trim }}"
+          - "=========================================================="

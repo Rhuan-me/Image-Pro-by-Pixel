@@ -65,3 +65,11 @@ docker-compose.override.yml
 
 *.cache
 *.pid
+
+# Vagrant & VirtualBox
+.vagrant/
+infrastructure/vagrant/.vagrant/
+infrastructure/vagrant/worker_token.txt
+
+# Ansible
+*.retry
