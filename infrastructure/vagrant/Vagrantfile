@@ -12,8 +12,8 @@ Vagrant.configure("2") do |config|
         end
         # Inicializa o Swarm e salva o token de join em um arquivo compartilhado
         manager.vm.provision "shell", inline: <<-SHELL
-        echo "=== Configurando Docker no Manager ==="
-        apt-get update && apt-get install -y docker.io
+        echo "=== Configurando Docker e Ansible no Manager ==="
+        apt-get update && apt-get install -y docker.io ansible
         usermod -aG docker vagrant
         
         echo "=== Inicializando o Docker Swarm ==="
