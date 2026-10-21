@@ -1,7 +1,7 @@
-
 stages:
   - build
   - test
+  - deploy
 
 default:
   image: node:20-bookworm
@@ -58,3 +58,26 @@ test-api-gateway:
       exit "$test_status"
   after_script:
     - redis-cli shutdown || true
+
+build-and-push-images:
+  stage: deploy
+  image: docker:27.5.1-cli
+  services:
+    - name: docker:27.5.1-dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" --username "$CI_REGISTRY_USER" --password-stdin
+  script:
+      - docker build --pull -t "$CI_REGISTRY_IMAGE/api-gateway:$CI_COMMIT_SHORT_SHA" -t "$CI_REGISTRY_IMAGE/api-gateway:latest" backend/services/api-gateway
+      - docker push "$CI_REGISTRY_IMAGE/api-gateway:$CI_COMMIT_SHORT_SHA"
+      - docker push "$CI_REGISTRY_IMAGE/api-gateway:latest"
+      - docker build --pull -t "$CI_REGISTRY_IMAGE/auth-service:$CI_COMMIT_SHORT_SHA" -t "$CI_REGISTRY_IMAGE/auth-service:latest" backend/services/auth-service
+      - docker push "$CI_REGISTRY_IMAGE/auth-service:$CI_COMMIT_SHORT_SHA"
+      - docker push "$CI_REGISTRY_IMAGE/auth-service:latest"
