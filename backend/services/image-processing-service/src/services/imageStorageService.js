@@ -1,11 +1,12 @@
 const path = require('node:path');
 const { v4: uuidv4 } = require('uuid');
 const { env } = require('../config/env');
-const { saveImageRecord, getImageRecord } = require('../config/database');
+const Image = require('../models/image.model');
+const { isDatabaseConnected } = require('../config/database');
 
 /**
  * Armazenamento em memória para simular de forma ultra-rápida o upload de arquivos
- * e realizar persistência paralela no banco PostgreSQL quando disponível.
+ * e realizar persistência paralela no PostgreSQL via Sequelize quando disponível.
  */
 class ImageStorageService {
   constructor() {
@@ -28,7 +29,7 @@ class ImageStorageService {
   }
 
   /**
-   * Salva metadados e buffer da imagem em memória e persiste no banco se ativo.
+   * Salva metadados e buffer da imagem em memória e persiste no banco via Sequelize se ativo.
    */
   async storeImage({ file, userId = 'usr_anonymous', originalName, mimeType }) {
     const safeUserId = userId || 'usr_anonymous';
@@ -57,52 +58,71 @@ class ImageStorageService {
       buffer: file?.buffer || null
     });
 
-    // 2. Persistência no PostgreSQL (poupa trabalho futuro para o projeto)
-    try {
-      await saveImageRecord(record);
-    } catch (dbErr) {
-      console.warn(`[Storage] Imagem ${imageId} salva apenas em memória (DB offline).`);
+    // 2. Persistência no PostgreSQL via Sequelize (poupa trabalho futuro para o projeto)
+    if (isDatabaseConnected()) {
+      try {
+        await Image.upsert({
+          id: imageId,
+          userId: safeUserId,
+          originalName: resolvedName,
+          mimeType: resolvedMime,
+          fileSize,
+          filePath: simulatedFilePath,
+          status: 'PENDING'
+        });
+      } catch (dbErr) {
+        console.warn(`[Sequelize] Falha ao persistir imagem ${imageId}:`, dbErr.message);
+      }
     }
 
     return record;
   }
 
   /**
-   * Busca registro de imagem por ID (em memória ou no banco).
+   * Busca registro de imagem por ID (em memória ou no banco via Sequelize).
    */
   async getImageById(imageId) {
     if (this.memoryStore.has(imageId)) {
       return this.memoryStore.get(imageId);
     }
-    const dbRecord = await getImageRecord(imageId);
-    if (dbRecord) {
-      return {
-        id: dbRecord.id,
-        userId: dbRecord.user_id,
-        originalName: dbRecord.original_name,
-        mimeType: dbRecord.mime_type,
-        fileSize: Number(dbRecord.file_size),
-        filePath: dbRecord.file_path,
-        status: dbRecord.status,
-        createdAt: dbRecord.created_at,
-        updatedAt: dbRecord.updated_at
-      };
+
+    if (isDatabaseConnected()) {
+      try {
+        const dbRecord = await Image.findByPk(imageId);
+        if (dbRecord) {
+          return dbRecord.toJSON();
+        }
+      } catch (dbErr) {
+        console.warn(`[Sequelize] Falha ao buscar imagem ${imageId}:`, dbErr.message);
+      }
     }
+
     return null;
   }
 
   /**
-   * Atualiza status do processamento.
+   * Atualiza status do processamento (em memória e no Sequelize).
    */
   async updateStatus(imageId, status) {
+    let updated = null;
+
     if (this.memoryStore.has(imageId)) {
       const item = this.memoryStore.get(imageId);
       item.status = status;
       item.updatedAt = new Date().toISOString();
       this.memoryStore.set(imageId, item);
-      return item;
+      updated = item;
     }
-    return null;
+
+    if (isDatabaseConnected()) {
+      try {
+        await Image.update({ status }, { where: { id: imageId } });
+      } catch (dbErr) {
+        console.warn(`[Sequelize] Falha ao atualizar status ${imageId}:`, dbErr.message);
+      }
+    }
+
+    return updated;
   }
 
   /**

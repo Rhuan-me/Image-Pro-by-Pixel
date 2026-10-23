@@ -13,7 +13,7 @@ Microsserviço produtor responsável por receber requisições de upload de imag
 [Image Processing Service] 
        ├─► 1. Validação de Mime Type e Tamanho (10MB)
        ├─► 2. Simulação de Storage em Memória (Rápido)
-       ├─► 3. Gravação no PostgreSQL (Tabela 'images')
+       ├─► 3. Gravação no PostgreSQL via Sequelize (Model 'Image' / Tabela 'images')
        └─► 4. Publicação no RabbitMQ (Exchange: 'pixpro.events' | Routing Key: 'image.uploaded')
                   │
                   ▼
