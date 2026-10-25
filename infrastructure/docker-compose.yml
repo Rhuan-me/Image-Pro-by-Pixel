@@ -67,6 +67,7 @@ services:
       AUTH_SERVICE_URL: "http://auth-service:3001"
       PROJECT_SERVICE_URL: "http://project-service:3002"
       IMAGE_SERVICE_URL: "http://image-processing-service:3003"
+      JWT_SECRET: "9OIO4sUpcFBu52TfMIg-_aiPci1KOJtmTPQaQDSreV0"
     ports:
       - "8000:8000"
     depends_on:
@@ -87,6 +88,10 @@ services:
       NODE_ENV: development
       PORT: 3001
       DATABASE_URL: "postgres://${POSTGRES_USER:-pixpro}:${POSTGRES_PASSWORD:-dev-postgres-password}@postgres:5432/${POSTGRES_DB:-pixpro}"
+      JWT_SECRET: "9OIO4sUpcFBu52TfMIg-_aiPci1KOJtmTPQaQDSreV0"
+      JWT_ISSUER: ${JWT_ISSUER:-pixpro-auth-service}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-pixpro-api}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
     ports:
       - "127.0.0.1:3001:3001"
     depends_on:
