@@ -9,6 +9,7 @@ services:
       - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
+      - image_storage:/storage
     healthcheck:
       test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep -q PONG"]
       interval: 5s
@@ -96,10 +97,53 @@ services:
       - pixpro-network
     restart: unless-stopped
 
+  image-processing-service:
+    build:
+      context: ../backend/services/image-processing-service
+      dockerfile: Dockerfile
+    container_name: pixpro-image-processing
+    environment:
+      NODE_ENV: development
+      PORT: 3003
+      DATABASE_URL: "postgres://${POSTGRES_USER:-pixpro}:${POSTGRES_PASSWORD:-dev-postgres-password}@postgres:5432/${POSTGRES_DB:-pixpro}"
+      RABBITMQ_URL: "amqp://${RABBITMQ_USER:-pixpro}:${RABBITMQ_PASSWORD:-dev-rabbit-password}@rabbitmq:5672"
+      STORAGE_BASE_PATH: /storage/raw
+    ports:
+      - "127.0.0.1:3003:3003"
+    volumes:
+      - image_storage:/storage
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - pixpro-network
+    restart: unless-stopped
+
+  ai-worker:
+    build:
+      context: ../backend/services/ai-worker
+      dockerfile: Dockerfile
+    container_name: pixpro-ai-worker
+    environment:
+      RABBITMQ_URL: "amqp://${RABBITMQ_USER:-pixpro}:${RABBITMQ_PASSWORD:-dev-rabbit-password}@rabbitmq:5672"
+      AI_MODE: simulate
+      SIMULATE_DELAY_MS: 8000
+    volumes:
+      - image_storage:/storage
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - pixpro-network
+    restart: unless-stopped
+
 volumes:
   redis_data:
   postgres_data:
   rabbitmq_data:
+  image_storage:
 
 networks:
   pixpro-network:

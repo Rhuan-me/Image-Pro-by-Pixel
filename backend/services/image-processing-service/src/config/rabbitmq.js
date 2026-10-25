@@ -7,7 +7,7 @@ let isConnected = false;
 let isConnecting = false;
 
 /**
- * Inicializa a conexão com o broker RabbitMQ e configura a topologia básica (Exchange + Queue + Binding).
+ * Inicializa a conexão com o broker RabbitMQ e configura a topologia (Exchange + DLX/DLQ + Queue + Binding).
  */
 async function connectRabbitMQ(retryCount = 5, retryDelayMs = 3000) {
   if (channel && isConnected) return channel;
@@ -19,7 +19,7 @@ async function connectRabbitMQ(retryCount = 5, retryDelayMs = 3000) {
     try {
       console.log(`[RabbitMQ] Conectando a ${env.rabbitmqUrl.replace(/:[^:@]+@/, ':***@')} (Tentativa ${attempt}/${retryCount})...`);
       connection = await amqp.connect(env.rabbitmqUrl);
-      
+
       connection.on('error', (err) => {
         console.error('[RabbitMQ] Erro na conexão:', err.message);
         isConnected = false;
@@ -32,16 +32,27 @@ async function connectRabbitMQ(retryCount = 5, retryDelayMs = 3000) {
       });
 
       channel = await connection.createChannel();
-      
+
       // 1. Declara a Exchange do tipo Topic (durable: true)
       await channel.assertExchange(env.rabbitmqExchange, 'topic', { durable: true });
       console.log(`[RabbitMQ] Exchange '${env.rabbitmqExchange}' (topic) verificada/criada.`);
 
-      // 2. Declara a Fila (durable: true)
-      await channel.assertQueue(env.rabbitmqQueue, { durable: true });
-      console.log(`[RabbitMQ] Fila '${env.rabbitmqQueue}' (durable) verificada/criada.`);
+      // 2. Dead Letter Exchange + DLQ (mensagens rejeitadas pelo worker vão para cá)
+      await channel.assertExchange('pixpro.events.dlx', 'direct', { durable: true });
+      await channel.assertQueue('image-dlq', { durable: true });
+      await channel.bindQueue('image-dlq', 'pixpro.events.dlx', 'image.dead');
 
-      // 3. Realiza o Binding da Fila à Exchange com a Routing Key
+      // 3. Fila principal, apontando para o DLX
+      await channel.assertQueue(env.rabbitmqQueue, {
+        durable: true,
+        arguments: {
+          'x-dead-letter-exchange': 'pixpro.events.dlx',
+          'x-dead-letter-routing-key': 'image.dead'
+        }
+      });
+      console.log(`[RabbitMQ] Fila '${env.rabbitmqQueue}' (durable, com DLX) verificada/criada.`);
+
+      // 4. Realiza o Binding da Fila à Exchange com a Routing Key
       await channel.bindQueue(env.rabbitmqQueue, env.rabbitmqExchange, env.rabbitmqRoutingKey);
       console.log(`[RabbitMQ] Fila '${env.rabbitmqQueue}' vinculada à Exchange com routing key '${env.rabbitmqRoutingKey}'.`);
 
@@ -85,10 +96,10 @@ async function publishEvent(routingKey, eventPayload, options = {}) {
   };
 
   const published = channel.publish(
-    env.rabbitmqExchange,
-    routingKey || env.rabbitmqRoutingKey,
-    messageBuffer,
-    publishOptions
+      env.rabbitmqExchange,
+      routingKey || env.rabbitmqRoutingKey,
+      messageBuffer,
+      publishOptions
   );
 
   if (!published) {
