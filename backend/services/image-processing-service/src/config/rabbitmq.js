@@ -126,9 +126,14 @@ async function closeRabbitMQ() {
   }
 }
 
+function getChannel() {
+  return isConnected ? channel : null;
+}
+
 module.exports = {
   connectRabbitMQ,
   publishEvent,
   isRabbitMQConnected,
-  closeRabbitMQ
+  closeRabbitMQ,
+  getChannel
 };

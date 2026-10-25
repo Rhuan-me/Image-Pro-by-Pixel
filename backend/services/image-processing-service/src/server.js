@@ -2,6 +2,7 @@ const app = require('./app');
 const { env } = require('./config/env');
 const { connectRabbitMQ, closeRabbitMQ } = require('./config/rabbitmq');
 const { initDatabase, closeDatabase } = require('./config/database');
+const { startResultsConsumer } = require('./consumers/resultsConsumer');
 
 async function bootstrap() {
   console.log(`====================================================`);
@@ -21,6 +22,12 @@ async function bootstrap() {
     await initDatabase();
   } catch (err) {
     console.warn('[Bootstrap] PostgreSQL ainda não disponível. Operando com armazenamento em memória.');
+  }
+  // 3. Consome eventos de resultado (ImageProcessed / ProcessingError) e atualiza o status
+  try {
+    await startResultsConsumer();
+  } catch (err) {
+    console.warn('[Bootstrap] Não foi possível iniciar o consumidor de resultados:', err.message);
   }
 
   // 3. Inicia servidor HTTP
