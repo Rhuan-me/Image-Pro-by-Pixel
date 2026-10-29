@@ -63,6 +63,8 @@ services:
     environment:
       PORT: 8000
       NODE_ENV: development
+      JWT_ENABLED: "true"
+      JWT_REVOKED_PREFIX: "pixpro:auth:revoked:"
       REDIS_URL: "redis://:${REDIS_PASSWORD:-dev-redis-password}@redis:6379"
       AUTH_SERVICE_URL: "http://auth-service:3001"
       PROJECT_SERVICE_URL: "http://project-service:3002"
@@ -92,10 +94,14 @@ services:
       JWT_ISSUER: ${JWT_ISSUER:-pixpro-auth-service}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-pixpro-api}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
+      REDIS_URL: "redis://:${REDIS_PASSWORD:-dev-redis-password}@redis:6379"
+      JWT_REVOKED_PREFIX: "pixpro:auth:revoked:"
     ports:
       - "127.0.0.1:3001:3001"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - pixpro-network

@@ -26,4 +26,30 @@ async function login(req, res, next) {
   }
 }
 
-module.exports = { register, login };
+
+
+async function logout(req, res, next) {
+  try {
+    const header = req.get('authorization') || '';
+
+    if (!header.startsWith('Bearer ')) {
+      return res.status(401).json({
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Token Bearer obrigatório.'
+        }
+      });
+    }
+
+    const token = header.slice(7).trim();
+    await authService.logout(token);
+
+    return res.status(200).json({
+      message: 'Logout realizado com sucesso.'
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+module.exports = { register, login, logout };
