@@ -1,3 +1,4 @@
+const { randomUUID } = require('node:crypto');
 require('dotenv').config();
 
 function getJwtConfig() {
@@ -18,13 +19,28 @@ function getJwtConfig() {
   };
 }
 
-async function signToken(userId) {
-  const { SignJWT } = await import('jose');
+async function signToken({ userId, email, roles }) {
+  const { SignJWT } = await import("jose");
   const { key, issuer, audience } = getJwtConfig();
 
-  return new SignJWT({})
-    .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+  if (
+    typeof userId !== "string" ||
+    !userId ||
+    typeof email !== "string" ||
+    !email ||
+    !Array.isArray(roles)
+  ) {
+    throw new Error("Dados inválidos para gerar o token JWT.");
+  }
+
+  return new SignJWT({
+    userId,
+    email,
+    roles,
+  })
+    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setSubject(userId)
+    .setJti(randomUUID())
     .setIssuer(issuer)
     .setAudience(audience)
     .setIssuedAt()
@@ -41,9 +57,20 @@ async function verifyToken(token) {
     issuer,
     audience
   });
+  if ( typeof payload.jti !== 'string' ||  !payload.jti || !Number.isInteger(payload.exp)) {
+    throw new Error('Claims de sessão inválidos.');
+  }
 
   if (typeof payload.sub !== 'string' || !payload.sub) {
     throw new Error('Token sem identificador de usuário.');
+  }
+
+  if (
+    payload.userId !== payload.sub ||
+    typeof payload.email !== "string" ||
+    !Array.isArray(payload.roles)
+  ) {
+    throw new Error("Claims obrigatórios do token JWT inválidos.");
   }
 
   return payload;

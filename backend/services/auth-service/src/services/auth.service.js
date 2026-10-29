@@ -1,7 +1,9 @@
 const argon2 = require('argon2');
 const { UniqueConstraintError } = require('sequelize');
 const User = require('../models/user.model');
-const { signToken } = require('../config/jwt');
+const { signToken, verifyToken } = require('../config/jwt');
+const { redisClient, redisReady } = require('../config/redis');
+const revokedPrefix = process.env.JWT_REVOKED_PREFIX || 'pixpro:auth:revoked:';
 
 function createError(status, code, message) {
   const error = new Error(message);
@@ -57,18 +59,66 @@ async function login({ email, password }) {
     );
   }
 
-  const accessToken = await signToken(user.id);
+  const roles = ['user'];
+
+  const accessToken = await signToken({
+    userId: String(user.id),
+    email: user.email,
+    roles,
+  });
 
   return {
     accessToken,
     tokenType: 'Bearer',
     expiresIn: process.env.JWT_EXPIRES_IN || '15m',
-    user: publicUser(user)
+    user: {
+      ...publicUser(user),
+      roles,
+    },
   };
+}
+
+async function logout(token) {
+  let payload;
+
+  try {
+    payload = await verifyToken(token);
+  } catch {
+    throw createError(401, "INVALID_TOKEN", "Token inválido ou expirado.");
+  }
+
+  if (!payload.jti || !Number.isInteger(payload.exp)) {
+    throw createError(
+      401,
+      "INVALID_TOKEN",
+      "Token sem dados de sessão válidos.",
+    );
+  }
+
+  const ttl = payload.exp - Math.floor(Date.now() / 1000);
+
+  if (ttl <= 0) {
+    throw createError(401, "INVALID_TOKEN", "Token inválido ou expirado.");
+  }
+
+  try {
+    await redisReady;
+
+    await redisClient.set(`${revokedPrefix}${payload.jti}`, "1", { EX: ttl });
+  } catch {
+    throw createError(
+      503,
+      "SESSION_STORE_UNAVAILABLE",
+      "Não foi possível encerrar a sessão. Tente novamente.",
+    );
+  }
+
+  return { revoked: true };
 }
 
 module.exports = {
   register,
   login,
-  publicUser
+  publicUser,
+  logout,
 };

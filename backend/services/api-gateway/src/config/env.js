@@ -25,7 +25,8 @@ const env = {
   jwtPublicKeyPath: process.env.JWT_PUBLIC_KEY_PATH ? path.resolve(process.env.JWT_PUBLIC_KEY_PATH) : '',
   jwtIssuer: process.env.JWT_ISSUER || undefined,
   jwtAudience: process.env.JWT_AUDIENCE || undefined,
-  publicAuthPaths: csv(process.env.PUBLIC_AUTH_PATHS, '/api/v1/auth/login,/api/v1/auth/register,/api/v1/auth/forgot-password,/api/v1/auth/refresh')
+  jwtRevokedPrefix: process.env.JWT_REVOKED_PREFIX || 'pixpro:auth:revoked:',
+  publicAuthPaths: csv(process.env.PUBLIC_AUTH_PATHS, '/api/auth/login,/api/auth/register,/api/v1/auth/login,/api/v1/auth/register,/api/v1/auth/forgot-password,/api/v1/auth/refresh')
 };
 
 function validateEnv() {

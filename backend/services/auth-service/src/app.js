@@ -12,11 +12,13 @@ app.disable('x-powered-by');
 
 app.use(express.json({ limit: '10kb' }));
 
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    service: 'auth-service'
-  });
+app.get('/health', async (req, res) => {
+  try {
+    await sequelize.authenticate();
+    res.status(200).json({ status: 'ok', service: 'auth-service' });
+  } catch {
+    res.status(503).json({ status: 'unavailable' });
+  }
 });
 
 app.get('/ready', async (req, res) => {
