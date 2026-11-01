@@ -1,0 +1,127 @@
+@startuml fluxo-eventos-normal
+!theme plain
+autonumber "<b>[00]</b>"
+skinparam DefaultFontName "Helvetica, Arial, sans-serif"
+skinparam DefaultFontSize 12
+skinparam RoundCorner 8
+skinparam Shadowing false
+skinparam ArrowColor #2C3E50
+skinparam ArrowThickness 1.5
+skinparam BoxPadding 10
+skinparam ParticipantPadding 10
+
+skinparam sequence {
+    GroupBorderColor #7F8C8D
+    GroupBackgroundColor #F8F9FA
+    GroupHeaderFontColor #2C3E50
+    LifeLineBorderColor #BDC3C7
+    LifeLineBackgroundColor #ECF0F1
+}
+
+box "Camada de Cliente" #EBF5FB
+    actor "Usuário / Web SPA\n(React + TypeScript)" as Client #3498DB
+end box
+
+box "Borda & Roteamento" #EAECEE
+    participant "API Gateway\n(Node.js / Express)" as Gateway #34495E
+end box
+
+box "Microsserviços de Negócio" #E8F8F5
+    participant "Image Processing\nService (Produtor)" as ImgService #1ABC9C
+    database "PostgreSQL\n(Sequelize ORM)" as DB #16A085
+end box
+
+box "Armazenamento Desacoplado" #FEF9E7
+    database "Storage / CDN\n(MinIO / S3)" as Storage #F39C12
+end box
+
+box "Barramento de Mensageria (Event Bus)" #FDEDEC
+    queue "RabbitMQ Exchange\n[pixpro.events] (topic)" as Exchange #E74C3C
+    queue "RabbitMQ Fila\n[image-queue] (durable)" as Queue #C0392B
+end box
+
+box "Processamento Inteligente & Real-Time" #F4ECF7
+    participant "AI Worker Pool\n(Python / PyTorch)" as Worker #8E44AD
+    participant "Notification Service\n(WebSocket Server)" as Notif #9B59B6
+end box
+
+== 1. Início do Fluxo: Upload e Recepção ==
+
+Client -> Gateway: POST /api/images/upload (multipart/form-data)\n[Headers: Authorization (JWT), X-Correlation-ID]
+activate Gateway #34495E
+
+Gateway -> Gateway: Valida Token JWT e aplica Rate-Limiting\nInjeta Header X-User-ID e repassa
+Gateway -> ImgService: Proxy HTTP: POST /api/images/upload
+activate ImgService #1ABC9C
+
+ImgService -> ImgService: Valida Mime Type (JPEG/PNG/WEBP)\ne tamanho máximo (10MB)
+
+ImgService -> Storage: Salva binário bruto original\n(/storage/raw/usr_123/img_987.jpg)
+activate Storage #F39C12
+Storage --> ImgService: Confirmação de persistência física (URI)
+deactivate Storage
+
+ImgService -> DB: Image.create() / upsert()\n[Status: PENDING, FilePath, UserId]
+activate DB #16A085
+DB --> ImgService: Registro criado (imageId: img_987)
+deactivate DB
+
+== 2. Emissão do Evento no Event Bus ==
+
+ImgService -> Exchange: Publica evento [ImageUploaded]\nRouting Key: image.uploaded\nPayload: { imageId, userId, filePath, originalName }
+activate Exchange #E74C3C
+
+Exchange -> Queue: Roteia mensagem para a fila 'image-queue'\n(Persistência garantida no disco)
+activate Queue #C0392B
+deactivate Exchange
+
+ImgService -->> Gateway: HTTP 202 Accepted\n{ success: true, imageId: "img_987", status: "PENDING" }
+deactivate ImgService
+
+Gateway -->> Client: HTTP 202 Accepted\n(Interface do usuário exibe status "Aguardando na Fila")
+deactivate Gateway
+
+== 3. Consumo Assíncrono e Inferência de IA ==
+
+Worker -> Queue: Consome mensagem pendente (basic.consume)
+activate Worker #8E44AD
+Queue --> Worker: Entrega payload do evento [ImageUploaded]
+deactivate Queue
+
+Worker -> Storage: Baixa imagem original para análise\nGET /storage/raw/usr_123/img_987.jpg
+activate Storage #F39C12
+Storage --> Worker: Retorna binário da imagem
+deactivate Storage
+
+Worker -> Worker: Executa Pipeline de IA\n• Pré-processamento e normalização\n• Inferência do Modelo (Transfer Learning / MobileNet)\n• Geração de filtros / detecção de objetos
+
+Worker -> Storage: Faz upload do resultado processado\n(/storage/processed/usr_123/img_987_out.jpg)
+activate Storage #F39C12
+Storage --> Worker: Confirmação de upload do ativo final
+deactivate Storage
+
+Worker -> DB: Atualiza metadados no banco relacional\n[Status: PROCESSED, ProcessedPath, AI_Metrics]
+activate DB #16A085
+DB --> Worker: Registro atualizado com sucesso
+deactivate DB
+
+== 4. Notificação em Tempo Real ao Usuário ==
+
+Worker -> Exchange: Publica evento [ImageProcessed]\nRouting Key: image.processed\nPayload: { imageId, userId, processedFilePath, aiMetadata }
+activate Exchange #E74C3C
+
+Exchange -> Notif: Roteia evento para o serviço de notificações
+deactivate Exchange
+activate Notif #9B59B6
+
+Worker -> Queue: Envia ACK de confirmação (basic.ack)\nRemove mensagem original da fila
+deactivate Worker
+
+Notif -> Notif: Localiza conexão WebSocket ativa\ndo usuário (userId: usr_123)
+
+Notif -->> Client: Mensagem WebSocket (WSS Push):\n{ type: "IMAGE_READY", imageId: "img_987", url: "..." }
+deactivate Notif
+
+Client -> Client: Atualiza dashboard e exibe a imagem processada\n(Zero polling HTTP necessário)
+
+@enduml

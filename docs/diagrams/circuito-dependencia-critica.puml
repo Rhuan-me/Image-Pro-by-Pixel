@@ -1,0 +1,43 @@
+@startuml circuito-dependencia-critica
+!theme plain
+skinparam DefaultFontName "Helvetica, Arial, sans-serif"
+skinparam DefaultFontSize 12
+skinparam RoundCorner 8
+skinparam Shadowing false
+skinparam ArrowColor #2C3E50
+skinparam ArrowThickness 1.5
+
+title <b>Diagrama C — Padrão Circuit Breaker (Dependência Crítica: Motor de Inferência IA / GPU)</b>
+
+[*] --> Closed : Inicialização do Serviço
+
+state "<b>CLOSED (Circuito Fechado)</b>\n<i>Operação Normal</i>\n---\n• Requisições encaminhadas normalmente à IA/GPU\n• Monitoramento de taxas de erro e latência\n• Métricas resetadas a cada janela de amostragem" as Closed #D5F5E3
+
+state "<b>OPEN (Circuito Aberto)</b>\n<i>Falha Ativa / Fast-Fail</i>\n---\n• Bloqueia chamadas ao serviço em colapso\n• Resposta imediata com Fallback / Retry com delay\n• Inicia timer de recuperação (Cooldown: 30s)\n• Protege a GPU contra sobrecarga/OOM" as Open #FADBD8
+
+state "<b>HALF_OPEN (Meio Aberto)</b>\n<i>Verificação de Recuperação</i>\n---\n• Permite passagem de requisições-sonda (Canary: N=3)\n• Avalia estabilidade do serviço de IA\n• Bloqueia o tráfego restante temporariamente" as HalfOpen #FCF3CF
+
+Closed --> Open : <b>Gatilho de Abertura</b>\nTaxa de falha > 50% ou 5 timeouts consecutivos\n(Janela de 10 segundos)
+
+Open --> HalfOpen : <b>Gatilho de Teste</b>\nTempo de Cooldown expirado (30 segundos)\n(Preparação para probes)
+
+HalfOpen --> Closed : <b>Gatilho de Recuperação</b>\nTodas as requisições de teste (N=3)\nprocessadas com sucesso
+
+HalfOpen --> Open : <b>Gatilho de Reabertura</b>\nQualquer falha detectada\nnas requisições de teste
+
+note right of Open
+  <b>Comportamento durante Circuito Aberto:</b>
+  1. Chamadas não alcançam a GPU/API de IA com falha.
+  2. Mensagem é desviada para a fila de retry 
+     (<b>image.retry.delay</b>) ou retorna resposta degradada.
+  3. Previne efeito cascata e colapso de memória.
+end note
+
+note left of Closed
+  <b>Métricas Monitoradas:</b>
+  • Timeout (> 10s de resposta)
+  • Erros HTTP 500/503 ou OOM
+  • Taxa de transferência (throughput)
+end note
+
+@enduml

@@ -1,0 +1,136 @@
+@startuml ciclo-tratamento-erros-dlq
+!theme plain
+autonumber "<b>[00]</b>"
+skinparam DefaultFontName "Helvetica, Arial, sans-serif"
+skinparam DefaultFontSize 12
+skinparam RoundCorner 8
+skinparam Shadowing false
+skinparam ArrowColor #2C3E50
+skinparam ArrowThickness 1.5
+skinparam BoxPadding 10
+skinparam ParticipantPadding 10
+
+skinparam sequence {
+    GroupBorderColor #C0392B
+    GroupBackgroundColor #FDEDEC
+    GroupHeaderFontColor #922B21
+    LifeLineBorderColor #BDC3C7
+    LifeLineBackgroundColor #ECF0F1
+}
+
+box "Processamento & Workers" #FADBD8
+    participant "AI Worker\n(Consumidor)" as Worker #C0392B
+    database "PostgreSQL\n(Sequelize)" as DB #16A085
+end box
+
+box "Broker de Mensagens (RabbitMQ Topologia)" #FCF3CF
+    queue "Fila Principal\n[image-queue]" as MainQueue #F39C12
+    queue "Fila de Espera / Retry\n[image.retry.delay]" as RetryQueue #D68910
+    queue "Dead Letter Exchange\n[pixpro.dlx] (direct)" as DLX #E74C3C
+    queue "Dead Letter Queue\n[image.processing.dlq]" as DLQ #922B21
+end box
+
+box "Notificações & Usuário" #EBF5FB
+    participant "Notification Service\n(WebSocket)" as Notif #8E44AD
+    actor "Usuário / Web SPA\n(React)" as Client #2980B9
+end box
+
+box "Operação & Observabilidade" #EAECEE
+    actor "Engenheiro de SRE /\nAdministrador" as Admin #34495E
+    participant "RabbitMQ Management\n& Dashboard (15672)" as Dashboard #2C3E50
+end box
+
+== 1. Consumo e Ocorrência de Falha Inicial ==
+
+Worker -> MainQueue: Consome evento [ImageUploaded]\n(DeliveryTag: #42, retryCount: 0)
+activate Worker #C0392B
+activate MainQueue #F39C12
+MainQueue --> Worker: Entrega payload da imagem
+deactivate MainQueue
+
+Worker -> Worker: Tenta executar inferência do modelo de IA...\n<b>[FALHA DETECTADA]</b>:\n• Timeout de execução (> 30s) OU\n• Dependência externa indisponível OU\n• Binário temporariamente ilegível
+
+== 2. Ciclo de Retentativas com Backoff Exponencial ==
+
+loop Tentativa 1 e 2 (Falha Transitória: retryCount < 3)
+    Worker -> Worker: Incrementa contador (retryCount = retryCount + 1)\nCalcula delay: base * 2^(retryCount)\n(Exemplo: 2s na 1ª vez, 4s na 2ª vez)
+    
+    Worker -> RetryQueue: Publica mensagem na fila com TTL (Time-To-Live)\ne cabeçalho 'x-retry-count'
+    activate RetryQueue #D68910
+    
+    Worker -> MainQueue: Envia confirmação (basic.ack) da mensagem atual\n(Evita travamento de outras tarefas)
+    
+    RetryQueue -> RetryQueue: Mensagem aguarda expiração do TTL (2s / 4s)...
+    
+    RetryQueue -> MainQueue: Ao expirar TTL, o RabbitMQ move automaticamente\na mensagem de volta para a fila principal 'image-queue'
+    deactivate RetryQueue
+    activate MainQueue #F39C12
+    
+    MainQueue --> Worker: Redelivery da tarefa para nova tentativa
+    deactivate MainQueue
+    
+    Worker -> Worker: Nova execução de inferência falha novamente...
+end
+
+== 3. Esgotamento de Retries e Roteamento para DLQ ==
+
+Worker -> Worker: Verifica condição de parada:\n<b>retryCount >= 3</b> (Falha Irreversível comprovada)
+
+Worker -> DLX: Rejeita mensagem sem re-enfileirar\n<b>basic.nack(requeue = false)</b>
+activate DLX #E74C3C
+
+DLX -> DLQ: Roteia mensagem morta para a fila segura\n'image.processing.dlq' com metadados de rejeição:\n• x-death reason: rejected\n• original-queue: image-queue\n• last-error: AI_INFERENCE_TIMEOUT\n• timestamp: 2026-11-01T15:00:00Z
+activate DLQ #922B21
+deactivate DLX
+
+note right of DLQ
+  <b>Isolamento Seguro (DLQ):</b>
+  A mensagem é retirada da fila ativa,
+  impedindo o travamento de novos jobs
+  (Prevenção de Head-of-Line Blocking)
+  e preservando os dados para auditoria.
+end note
+
+== 4. Emissão do Evento ProcessingError e Alerta ao Usuário ==
+
+Worker -> DB: Image.update({ status: 'FAILED' })\nRegistra motivo do erro e horário da falha
+activate DB #16A085
+DB --> Worker: Registro atualizado como FAILED
+deactivate DB
+
+Worker -> Notif: Publica evento [ProcessingError] no Event Bus\nPayload: { imageId, userId, errorCode: "AI_TIMEOUT", retryCount: 3 }
+deactivate Worker
+activate Notif #8E44AD
+
+Notif -->> Client: Notificação WebSocket Push (Alerta Vermelho):\n{ status: "FAILED", message: "Não foi possível processar a imagem. Tente novamente mais tarde." }
+deactivate Notif
+
+Client -> Client: Interface atualiza o status do card da imagem para "Falha no Processamento"
+
+== 5. Ciclo de Recuperação Operacional, Diagnóstico e Replay ==
+
+Admin -> Dashboard: Alerta disparado! Inspeciona métricas e mensagens retidas na DLQ
+activate Admin #34495E
+activate Dashboard #2C3E50
+Dashboard --> Admin: Exibe mensagem morta com pilha de erro e payload original
+
+Admin -> Admin: Diagnostica e resolve o problema na infraestrutura:\n(Ex: Reinicia nós de IA degradados ou libera memória do cluster)
+
+Admin -> Dashboard: Aciona comando de <b>Shovel / Replay</b> para reprocessamento
+Dashboard -> DLQ: Consome mensagem armazenada na DLQ
+DLQ --> Dashboard: Retorna mensagem íntegra
+deactivate DLQ
+
+Dashboard -> MainQueue: Reinjeta a mensagem na fila ativa 'image-queue'
+activate MainQueue #F39C12
+deactivate Dashboard
+deactivate Admin
+
+MainQueue --> Worker: Worker recuperado consome a tarefa novamente
+activate Worker #C0392B
+Worker -> Worker: Processamento executado com SUCESSO!
+Worker -> MainQueue: basic.ack
+deactivate Worker
+deactivate MainQueue
+
+@enduml
