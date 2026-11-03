@@ -20,7 +20,7 @@ router.use('/api/users', createProxy(env.authServiceUrl));
 router.use('/api/v1/auth', authLimiter, createProxy(env.authServiceUrl));
 router.use('/auth', authLimiter, createProxy(env.authServiceUrl));
 
-router.use('/api/v1/projects', createProxy(env.projectServiceUrl));
+router.use('/api/projects', createProxy(env.projectServiceUrl));
 router.use('/api/v1/images', createProxy(env.imageServiceUrl));
 
 module.exports = router;
