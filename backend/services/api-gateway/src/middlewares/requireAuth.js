@@ -1,13 +1,13 @@
 require('dotenv').config();
 
 const key = process.env.JWT_SECRET
-  ? Buffer.from(process.env.JWT_SECRET, 'base64url')
+  ? new TextEncoder().encode(process.env.JWT_SECRET)
   : null;
 
 const issuer = process.env.JWT_ISSUER;
 const audience = process.env.JWT_AUDIENCE;
 
-if (!key || key.length < 32 || !issuer || !audience) {
+if (!key || !issuer || !audience) {
   throw new Error('Configuração JWT do API Gateway inválida.');
 }
 
@@ -50,7 +50,7 @@ async function requireAuth(req, res, next) {
     req.auth = { userId: payload.sub };
 
     return next();
-  } catch {
+  } catch (error) {
     return res.status(401).json({
       error: {
         code: 'INVALID_TOKEN',

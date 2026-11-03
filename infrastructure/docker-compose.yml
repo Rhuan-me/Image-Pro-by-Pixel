@@ -107,6 +107,26 @@ services:
       - pixpro-network
     restart: unless-stopped
 
+  project-service:
+    build:
+      context: ../backend/services/project-service
+      dockerfile: Dockerfile
+    container_name: pixpro-project-service
+    env_file:
+      - ../backend/services/project-service/.env.example
+    environment:
+      NODE_ENV: development
+      PORT: 3002
+      DATABASE_URL: "postgres://${POSTGRES_USER:-pixpro}:${POSTGRES_PASSWORD:-dev-postgres-password}@postgres:5432/${POSTGRES_DB:-pixpro}"
+    ports:
+      - "127.0.0.1:3002:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - pixpro-network
+    restart: unless-stopped
+
 volumes:
   redis_data:
   postgres_data:

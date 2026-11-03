@@ -12,6 +12,11 @@ function createProxy(target) {
     on: {
       proxyReq(proxyReq, req) {
         if (req.correlationId) proxyReq.setHeader('x-correlation-id', req.correlationId);
+
+        // injeta o userId para uso de outro microservice
+        if (req.auth && req.auth.userId) {
+          proxyReq.setHeader('x-user-id', req.auth.userId);
+        }
       },
       error(err, req, res) {
         if (res.headersSent) return;

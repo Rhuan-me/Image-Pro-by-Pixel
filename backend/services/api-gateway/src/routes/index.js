@@ -2,6 +2,7 @@ const express = require('express');
 const { env } = require('../config/env');
 const { createProxy } = require('../proxy/createProxy');
 const { authLimiter } = require('../middlewares/rateLimit');
+const { requireAuth } = require('../middlewares/requireAuth');
 
 const router = express.Router();
 
@@ -20,7 +21,7 @@ router.use('/api/users', createProxy(env.authServiceUrl));
 router.use('/api/v1/auth', authLimiter, createProxy(env.authServiceUrl));
 router.use('/auth', authLimiter, createProxy(env.authServiceUrl));
 
-router.use('/api/v1/projects', createProxy(env.projectServiceUrl));
+router.use('/api/projects', requireAuth, createProxy(env.projectServiceUrl));
 router.use('/api/v1/images', createProxy(env.imageServiceUrl));
 
 module.exports = router;
