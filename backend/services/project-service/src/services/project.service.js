@@ -1,5 +1,5 @@
 const Project = require('../models/Project');
-const { createProjectSchema, updateProjectSchema } = require('../schemas/projectSchema');
+const { createProjectSchema, updateProjectSchema } = require('../schemas/project.schemas');
 
 function createError(status, code, message) {
   const error = new Error(message);

@@ -2,7 +2,8 @@ const express = require('express');
 const cors = require('cors');
 
 const sequelize = require('./config/database');
-const { errorHandler } = require('./middlewares/erros.middleware');
+const projectRoutes = require('./routes/project.routes');
+const errorHandler = require('./middlewares/erros.middleware');
 
 const app = express();
 

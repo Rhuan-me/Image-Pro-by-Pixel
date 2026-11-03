@@ -9,6 +9,9 @@ async function startServer() {
     await sequelize.authenticate();
     console.log('Conexão com o PostgreSQL estabelecida com sucesso.');
 
+    await sequelize.sync({ alter: true });
+    console.log('Tabela criada/alterada com sucesso');
+
     app.listen(PORT, () => {
       console.log(`Servidor rodando na porta ${PORT}`);
     });
