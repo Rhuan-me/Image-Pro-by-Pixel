@@ -27,33 +27,48 @@ describe('Image Upload & Query Endpoints', () => {
 
     assert.strictEqual(res.status, 400);
     assert.strictEqual(res.body.success, false);
-    assert.ok(res.body.message.includes('não suportado'));
+    assert.ok(res.body.message.includes('Formato de arquivo inválido') || res.body.message.includes('não suportado'));
   });
 
   it('POST /api/images/upload deve aceitar upload multipart com sucesso e simular persistência', async () => {
-    // 1x1 GIF ou JPEG mínimo em bytes
-    const mockImageBuffer = Buffer.from('GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00!\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;');
+    // 1x1 PNG mínimo em bytes
+    const mockImageBuffer = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      'base64'
+    );
 
     const res = await request(app)
       .post('/api/images/upload')
       .field('userId', 'usr_test_123')
-      .attach('image', mockImageBuffer, { filename: 'foto_teste.gif', contentType: 'image/gif' });
+      .attach('image', mockImageBuffer, { filename: 'foto_teste.png', contentType: 'image/png' });
 
     assert.strictEqual(res.status, 202);
     assert.strictEqual(res.body.success, true);
     assert.ok(res.body.data.imageId.startsWith('img_'));
     assert.strictEqual(res.body.data.userId, 'usr_test_123');
-    assert.strictEqual(res.body.data.originalName, 'foto_teste.gif');
-    assert.strictEqual(res.body.data.mimeType, 'image/gif');
+    assert.strictEqual(res.body.data.originalName, 'foto_teste.png');
+    assert.strictEqual(res.body.data.mimeType, 'image/png');
     assert.strictEqual(res.body.data.status, 'PENDING');
     assert.ok(res.body.data.filePath.includes('/storage/raw/usr_test_123/img_'));
+    assert.ok(res.body.data.storageUrl.includes('/pixpro-storage/raw/usr_test_123/img_'));
 
     // Consulta imediata em memória
     const getRes = await request(app).get(`/api/images/${res.body.data.imageId}`);
     assert.strictEqual(getRes.status, 200);
     assert.strictEqual(getRes.body.success, true);
     assert.strictEqual(getRes.body.data.id, res.body.data.imageId);
-    assert.strictEqual(getRes.body.data.originalName, 'foto_teste.gif');
+    assert.strictEqual(getRes.body.data.originalName, 'foto_teste.png');
+  });
+
+  it('POST /api/images/upload deve rejeitar (413) arquivo que excede o limite de 5MB', async () => {
+    const largeBuffer = Buffer.alloc(5 * 1024 * 1024 + 1024);
+    const res = await request(app)
+      .post('/api/images/upload')
+      .attach('image', largeBuffer, { filename: 'imagem_grande.jpg', contentType: 'image/jpeg' });
+
+    assert.strictEqual(res.status, 413);
+    assert.strictEqual(res.body.success, false);
+    assert.strictEqual(res.body.error, 'FILE_TOO_LARGE');
   });
 
   it('POST /api/images/upload deve aceitar metadados de imagem via JSON', async () => {

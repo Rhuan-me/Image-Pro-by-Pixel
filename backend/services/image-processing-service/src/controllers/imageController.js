@@ -1,10 +1,12 @@
+const { v4: uuidv4 } = require('uuid');
+const storageService = require('../services/storage.service');
 const imageStorageService = require('../services/imageStorageService');
 const eventPublisherService = require('../services/eventPublisherService');
 
 class ImageController {
   /**
    * POST /api/images/upload
-   * Recebe imagem (multipart/form-data ou JSON), armazena em memória (e DB) e emite ImageUploaded.
+   * Recebe imagem (multipart/form-data ou JSON), envia buffer para o MinIO, armazena metadados e emite ImageUploaded.
    */
   async upload(req, res, next) {
     try {
@@ -25,16 +27,36 @@ class ImageController {
 
       // Identificação do usuário (prioridade: body, cabeçalho de proxy/auth, ou fallback)
       const userId = body.userId || req.headers['x-user-id'] || 'usr_anonymous';
+      const originalName = file?.originalname || body.originalName || 'imagem.jpg';
+      const mimeType = file?.mimetype || body.mimeType || 'image/jpeg';
+      const imageId = `img_${Date.now()}_${uuidv4().substring(0, 8)}`;
+      const extension = imageStorageService.getExtension(originalName, mimeType);
+      const s3Key = `raw/${userId}/${imageId}${extension}`;
 
-      // 1. Simulação de Persistência em Memória (e banco PostgreSQL se disponível)
+      // 1. Upload do Buffer para o MinIO local via StorageService (@aws-sdk/client-s3)
+      let storageUrl = null;
+      if (file?.buffer) {
+        const uploadResult = await storageService.uploadFile({
+          buffer: file.buffer,
+          key: s3Key,
+          mimeType,
+          bucket: 'pixpro-storage'
+        });
+        storageUrl = uploadResult?.url || uploadResult?.publicUrl;
+      }
+
+      // 2. Persistência de Metadados em Memória (e PostgreSQL se ativo)
       const imageRecord = await imageStorageService.storeImage({
+        imageId,
         file,
         userId,
-        originalName: file?.originalname || body.originalName,
-        mimeType: file?.mimetype || body.mimeType
+        originalName,
+        mimeType,
+        storageUrl,
+        s3Key
       });
 
-      // 2. Disparo do Evento Assíncrono ImageUploaded no RabbitMQ
+      // 3. Disparo do Evento Assíncrono ImageUploaded no RabbitMQ
       let eventPayload = null;
       let eventStatus = 'PUBLISHED';
       try {
@@ -47,16 +69,18 @@ class ImageController {
         eventStatus = 'BROKER_OFFLINE_PENDING_RETRY';
       }
 
-      // 3. Resposta de Aceite (HTTP 202 Accepted - processamento assíncrono padrão)
+      // 4. Resposta de Aceite (HTTP 202 Accepted - processamento assíncrono)
       return res.status(202).json({
         success: true,
-        message: 'Upload aceito com sucesso. Evento de processamento disparado.',
+        message: 'Upload aceito com sucesso. Imagem armazenada e evento de processamento disparado.',
         data: {
           imageId: imageRecord.id,
           userId: imageRecord.userId,
           originalName: imageRecord.originalName,
           mimeType: imageRecord.mimeType,
           filePath: imageRecord.filePath,
+          storageUrl: imageRecord.storageUrl || storageUrl,
+          url: imageRecord.storageUrl || storageUrl,
           fileSize: imageRecord.fileSize,
           status: imageRecord.status,
           eventId: eventPayload?.eventId || null,
