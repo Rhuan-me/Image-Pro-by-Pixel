@@ -83,6 +83,9 @@ class ImageStorageService {
           mimeType: resolvedMime,
           fileSize,
           filePath: simulatedFilePath,
+          storageUrl: storageUrl || null, 
+          url: storageUrl || null,      
+          s3Key: s3Key || null,          
           status: 'PENDING'
         });
       } catch (dbErr) {
