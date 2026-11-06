@@ -5,19 +5,24 @@ const os = require('node:os');
 const path = require('node:path');
 const { createHandler } = require('../src/handler');
 
+const VALID_IMAGE_BUFFER = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    'base64'
+);
+
 async function setup(overrides = {}) {
     const base = await fs.mkdtemp(path.join(os.tmpdir(), 'pixpro-'));
     const raw = path.join(base, 'raw');
     await fs.mkdir(path.join(raw, 'u1'), { recursive: true });
     const filePath = path.join(raw, 'u1', 'img_1.jpg');
-    await fs.writeFile(filePath, 'conteudo');
+    await fs.writeFile(filePath, VALID_IMAGE_BUFFER);
 
     const published = [];
     const retried = [];
     let classifyCalls = 0;
 
     const handler = createHandler({
-        config: { rawBasePath: raw, processedBasePath: path.join(base, 'processed'), maxRetries: 2, maxFileBytes: 1024 },
+        config: { rawBasePath: raw, processedBasePath: path.join(base, 'processed'), maxRetries: 2, maxFileBytes: 1024 * 1024 },
         classify: overrides.classify || (async () => {
             classifyCalls += 1;
             return { modelUsed: 'fake', confidence: 0.9, tags: ['a'] };
@@ -39,11 +44,13 @@ function makeMsg(data, headers = {}) {
     };
 }
 
-test('sucesso: processa, publica ImageProcessed e confirma', async () => {
+test('sucesso: processa via Sharp, publica ImageProcessed com MinIO URL e confirma', async () => {
     const { handler, validData, published } = await setup();
     assert.equal(await handler(makeMsg(validData)), 'ack');
     assert.equal(published[0].type, 'ImageProcessed');
     await fs.access(published[0].data.processedFilePath);
+    assert.ok(published[0].data.processedStorageUrl.includes('/pixpro-storage/processed/u1/'));
+    assert.equal(published[0].data.aiMetadata.effectApplied, 'grayscale+sharpen');
 });
 
 test('idempotência: mesma mensagem duas vezes não reprocessa', async () => {
@@ -53,6 +60,16 @@ test('idempotência: mesma mensagem duas vezes não reprocessa', async () => {
     assert.equal(calls(), 1);
     assert.equal(published.length, 2);
     assert.equal(published[1].type, 'ImageProcessed');
+});
+
+test('imagem corrompida: captura exceção com segurança marcando como FAILED/dead-letter sem derrubar worker', async () => {
+    const { handler, raw, validData, published } = await setup();
+    const corruptPath = path.join(raw, 'u1', 'corrupt.jpg');
+    await fs.writeFile(corruptPath, 'conteudo corrompido que nao e imagem');
+    const corruptMsg = makeMsg({ ...validData, filePath: corruptPath });
+    assert.equal(await handler(corruptMsg), 'dead-letter');
+    assert.equal(published[0].type, 'ProcessingError');
+    assert.equal(published[0].data.errorCode, 'IMAGE_CORRUPTED');
 });
 
 test('evento sem imageId vai para a DLQ sem publicar nada', async () => {
