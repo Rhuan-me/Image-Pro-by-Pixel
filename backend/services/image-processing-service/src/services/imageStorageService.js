@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 const { env } = require('../config/env');
 const Image = require('../models/image.model');
 const { isDatabaseConnected } = require('../config/database');
+const fs = require('node:fs/promises');
 
 /**
  * Armazenamento em memória para simular de forma ultra-rápida o upload de arquivos
@@ -57,6 +58,11 @@ class ImageStorageService {
       ...record,
       buffer: file?.buffer || null
     });
+    // 1b. Grava o arquivo em disco (volume compartilhado com o ai-worker)
+    if (file?.buffer) {
+      await fs.mkdir(path.dirname(simulatedFilePath), { recursive: true });
+      await fs.writeFile(simulatedFilePath, file.buffer);
+    }
 
     // 2. Persistência no PostgreSQL via Sequelize (poupa trabalho futuro para o projeto)
     if (isDatabaseConnected()) {

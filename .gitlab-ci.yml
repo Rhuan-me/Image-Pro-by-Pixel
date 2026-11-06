@@ -58,6 +58,12 @@ test-api-gateway:
       exit "$test_status"
   after_script:
     - redis-cli shutdown || true
+test-ai-worker:
+  stage: test
+  timeout: 2 minutes
+  script:
+    - npm --prefix backend/services/ai-worker install --cache .npm
+    - npm --prefix backend/services/ai-worker test
 
 build-and-push-images:
   stage: deploy
