@@ -23,7 +23,10 @@ class EventPublisherService {
         userId: imageRecord.userId,
         filePath: imageRecord.filePath,
         originalName: imageRecord.originalName,
-        mimeType: imageRecord.mimeType
+        mimeType: imageRecord.mimeType,
+        s3Key: imageRecord.s3Key || null,
+        storageUrl: imageRecord.storageUrl || imageRecord.url || null,
+        bucket: 'pixpro-storage'
       }
     };
 

@@ -1,5 +1,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const imageProcessor = require('./services/imageProcessor');
+const workerStorageService = require('./services/storage');
 
 const TRANSIENT_FS = new Set(['EBUSY', 'EMFILE', 'ENFILE', 'EAGAIN', 'ETIMEDOUT', 'EIO']);
 
@@ -12,11 +14,15 @@ function mapFsError(err) {
     return err;
 }
 
-/** Valida o contrato do evento ImageUploaded antes de qualquer processamento. */
+/** Valida o contrato do evento (ImageUploaded ou ImageProcessRequested) antes de qualquer processamento. */
 function validateEvent(event, config) {
     if (!event || typeof event !== 'object') throw fail('INVALID_EVENT', 'Evento vazio ou malformado.');
     if (typeof event.eventId !== 'string') throw fail('INVALID_EVENT', 'Campo obrigatório ausente: eventId');
-    if (event.eventType !== 'ImageUploaded') throw fail('INVALID_EVENT', `eventType inesperado: ${event.eventType}`);
+    
+    const validEventTypes = ['ImageUploaded', 'ImageProcessRequested'];
+    if (!validEventTypes.includes(event.eventType)) {
+        throw fail('INVALID_EVENT', `eventType inesperado: ${event.eventType}`);
+    }
 
     const data = event.data || {};
     for (const field of ['imageId', 'userId', 'filePath']) {
@@ -34,8 +40,7 @@ function validateEvent(event, config) {
 }
 
 /**
- * Processa a imagem de forma idempotente: se o marcador (.json) já existe, não reprocessa.
- * Saída e marcador são gravados via arquivo temporário + rename (atômico).
+ * Processa a imagem aplicando efeito visual via Sharp de forma idempotente e com persistência no MinIO.
  */
 async function processImage(data, { config, classify, attempt }) {
     const rawBase = path.resolve(config.rawBasePath);
@@ -61,19 +66,43 @@ async function processImage(data, { config, classify, attempt }) {
     if (!stat.isFile()) throw fail('INVALID_FILE', 'filePath não aponta para um arquivo.');
     if (stat.size > config.maxFileBytes) throw fail('FILE_TOO_LARGE', `Arquivo excede ${config.maxFileBytes} bytes.`);
 
+    // 1. Inferência/Classificação IA
     const ai = await classify(data.resolvedPath, { originalName: data.originalName, attempt });
+
+    // 2. Processamento Local com Sharp (efeito visual aplicado em milissegundos)
+    const effectResult = await imageProcessor.applyVisualEffect(data.resolvedPath);
 
     try {
         await fs.mkdir(outDir, { recursive: true });
-        await fs.copyFile(data.resolvedPath, `${outFile}.tmp`); // copia sem carregar a imagem na memória
+        // Gravação local atômica via tmp + rename
+        await fs.writeFile(`${outFile}.tmp`, effectResult.buffer);
         await fs.rename(`${outFile}.tmp`, outFile);
+
+        // 3. Persistência da imagem resultante no MinIO Storage local (pixpro-storage)
+        const processedS3Key = `processed/${data.userId}/${name}_out${ext}`;
+        const contentType = effectResult.format ? `image/${effectResult.format}` : 'image/jpeg';
+        const storageResult = await workerStorageService.uploadProcessedImage({
+            buffer: effectResult.buffer,
+            key: processedS3Key,
+            contentType
+        });
 
         const result = {
             imageId: data.imageId,
             userId: data.userId,
             processedFilePath: outFile,
-            aiMetadata: { modelUsed: ai.modelUsed, confidence: ai.confidence, tags: ai.tags }
+            processedStorageUrl: storageResult.url,
+            url: storageResult.url,
+            s3Key: processedS3Key,
+            bucket: storageResult.bucket,
+            aiMetadata: {
+                modelUsed: ai.modelUsed,
+                confidence: ai.confidence,
+                tags: ai.tags,
+                effectApplied: effectResult.effectApplied
+            }
         };
+
         await fs.writeFile(`${doneFile}.tmp`, JSON.stringify(result));
         await fs.rename(`${doneFile}.tmp`, doneFile);
         return result;

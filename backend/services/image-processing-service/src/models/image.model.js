@@ -31,6 +31,16 @@ const Image = sequelize.define('Image', {
     defaultValue: 0,
     field: 'file_size'
   },
+  storageUrl: {
+    type: DataTypes.STRING(500),
+    allowNull: true,
+    field: 'storage_url' 
+  },
+  s3Key: {
+    type: DataTypes.STRING(500),
+    allowNull: true,
+    field: 's3_key' 
+  },
   status: {
     type: DataTypes.STRING(50),
     defaultValue: 'PENDING'
@@ -39,7 +49,7 @@ const Image = sequelize.define('Image', {
   tableName: 'images',
   timestamps: true,
   createdAt: 'created_at',
-  updatedAt: 'updated_at'
+  updated_at: 'updated_at'
 });
 
 module.exports = Image;

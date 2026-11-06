@@ -5,6 +5,7 @@ const imageStorageService = require('../services/imageStorageService');
 const RESULTS_QUEUE = 'image-results-queue';
 const STATUS_BY_EVENT = {
     ImageProcessed: 'PROCESSED',
+    ImageProcessCompleted: 'PROCESSED',
     ProcessingError: 'FAILED'
 };
 
@@ -44,7 +45,10 @@ async function startResultsConsumer() {
         }
 
         try {
-            await imageStorageService.updateStatus(imageId, status);
+            await imageStorageService.updateStatus(imageId, status, {
+                processedFilePath: event.data?.processedFilePath,
+                processedStorageUrl: event.data?.processedStorageUrl || event.data?.url
+            });
             console.log(`[ResultsConsumer] ${event.eventType}: imagem ${imageId} -> ${status}`);
             channel.ack(msg);
         } catch (err) {

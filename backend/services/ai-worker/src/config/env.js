@@ -20,7 +20,21 @@ const env = {
     rawBasePath: process.env.RAW_BASE_PATH || '/storage/raw',
     processedBasePath: process.env.PROCESSED_BASE_PATH || '/storage/processed',
     aiMode: process.env.AI_MODE || 'simulate',
-    simulateDelayMs: number(process.env.SIMULATE_DELAY_MS, 3000)
+    simulateDelayMs: number(process.env.SIMULATE_DELAY_MS, 3000),
+
+    // S3 / SeaweedFS / MinIO Storage
+    s3Endpoint: process.env.S3_ENDPOINT || process.env.MINIO_ENDPOINT || 'http://localhost:9000',
+    s3AccessKeyId: process.env.AWS_ACCESS_KEY_ID || process.env.S3_ACCESS_KEY_ID || process.env.MINIO_ROOT_USER || 'anykey',
+    s3SecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || process.env.S3_SECRET_ACCESS_KEY || process.env.MINIO_ROOT_PASSWORD || 'anysecret',
+    s3Bucket: process.env.S3_BUCKET || process.env.MINIO_BUCKET || 'pixpro-storage',
+    s3Region: process.env.AWS_REGION || process.env.S3_REGION || 'us-east-1',
+
+    // Aliases de retrocompatibilidade
+    minioEndpoint: process.env.S3_ENDPOINT || process.env.MINIO_ENDPOINT || 'http://localhost:9000',
+    minioRootUser: process.env.AWS_ACCESS_KEY_ID || process.env.S3_ACCESS_KEY_ID || process.env.MINIO_ROOT_USER || 'anykey',
+    minioRootPassword: process.env.AWS_SECRET_ACCESS_KEY || process.env.S3_SECRET_ACCESS_KEY || process.env.MINIO_ROOT_PASSWORD || 'anysecret',
+    minioBucket: process.env.S3_BUCKET || process.env.MINIO_BUCKET || 'pixpro-storage',
+    minioRegion: process.env.AWS_REGION || process.env.S3_REGION || 'us-east-1'
 };
 
 module.exports = { env };

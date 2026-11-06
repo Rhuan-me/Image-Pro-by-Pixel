@@ -6,4 +6,5 @@ RUN npm install --omit=dev && npm cache clean --force
 COPY src ./src
 RUN mkdir -p /storage/raw /storage/processed && chown -R node:node /storage
 USER node
+EXPOSE 3003
 CMD ["node", "src/worker.js"]
