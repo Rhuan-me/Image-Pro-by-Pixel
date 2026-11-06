@@ -60,12 +60,8 @@ class ImageStorageService {
     });
     // 1b. Grava o arquivo em disco (volume compartilhado com o ai-worker)
     if (file?.buffer) {
-      try {
-        await fs.mkdir(path.dirname(simulatedFilePath), { recursive: true });
-        await fs.writeFile(simulatedFilePath, file.buffer);
-      } catch (fsErr) {
-        console.warn(`[Storage] Falha ao gravar ${simulatedFilePath}:`, fsErr.message);
-      }
+      await fs.mkdir(path.dirname(simulatedFilePath), { recursive: true });
+      await fs.writeFile(simulatedFilePath, file.buffer);
     }
 
     // 2. Persistência no PostgreSQL via Sequelize (poupa trabalho futuro para o projeto)

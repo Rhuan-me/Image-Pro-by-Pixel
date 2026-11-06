@@ -49,7 +49,9 @@ async function startResultsConsumer() {
             channel.ack(msg);
         } catch (err) {
             console.error(`[ResultsConsumer] Erro ao atualizar ${imageId}:`, err.message);
-            channel.nack(msg, false, false); // fila sem DLX: a mensagem é descartada (limitação do MVP)
+            setTimeout(() => {
+                try { channel.nack(msg, false, true); } catch { /* canal fechado: o broker reentrega */ }
+            }, 2000); // devolve à fila: não perde o resultado se o banco estiver fora
         }
     }, { noAck: false });
 
