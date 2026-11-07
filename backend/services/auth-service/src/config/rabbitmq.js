@@ -2,22 +2,35 @@ const amqp = require('amqplib');
 
 const rabbitmqUrl = process.env.RABBITMQ_URL || 'amqp://pixpro:dev-rabbit-password@localhost:5672';
 const exchange = 'pixpro.events';
-let connection = null;
-let channel = null;
+let channelPromise = null;
 
-async function getChannel() {
-  if (channel) return channel;
+/** Conexão preguiçosa e compartilhada: chamadas simultâneas esperam a mesma tentativa. */
+function getChannel() {
+  if (!channelPromise) {
+    channelPromise = (async () => {
+      const conn = await amqp.connect(rabbitmqUrl, { timeout: 1000 });
+      conn.on('error', () => {});
+      conn.on('close', () => { channelPromise = null; });
 
-  connection = await amqp.connect(rabbitmqUrl, { timeout: 1000 });
-  connection.on('close', () => {
-    connection = null;
-    channel = null;
-  });
-  connection.on('error', () => {});
-
-  channel = await connection.createChannel();
-  await channel.assertExchange(exchange, 'topic', { durable: true });
-  return channel;
+      try {
+        const ch = await conn.createChannel();
+        ch.on('error', () => {});
+        ch.on('close', () => {
+          channelPromise = null;
+          conn.close().catch(() => {}); // canal caiu: força uma conexão nova na próxima publicação
+        });
+        await ch.assertExchange(exchange, 'topic', { durable: true });
+        return ch;
+      } catch (err) {
+        await conn.close().catch(() => {});
+        throw err;
+      }
+    })().catch((err) => {
+      channelPromise = null;
+      throw err;
+    });
+  }
+  return channelPromise;
 }
 
 async function publishEvent(routingKey, event) {

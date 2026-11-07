@@ -109,3 +109,17 @@ test('queries de projeto apenas leem e não publicam eventos', async () => {
   assert.equal((await getById(new GetProjectByIdQuery({ id: 'prj_1', userId: 'usr_1' }))).id, 'prj_1');
   assert.equal(writes, 0);
 });
+
+test('CreateProjectHandler mantém detalhes de validação no erro', async () => {
+  const details = { name: { _errors: ['O nome do projeto deve ter pelo menos 2 caracteres.'] } };
+  const handler = createCreateProjectHandler({
+    projectRepository: { create: async () => assert.fail('não deve criar projeto') },
+    validate: { safeParse: () => ({ success: false, error: { format: () => details } }) },
+    publishProjectCreated: async () => assert.fail('não deve publicar evento')
+  });
+
+  await assert.rejects(
+    handler(new CreateProjectCommand({ userId: 'usr_1', data: { name: 'x' } })),
+    (error) => error.status === 400 && error.code === 'VALIDATION_ERROR' && error.details === details
+  );
+});

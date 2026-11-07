@@ -14,7 +14,7 @@ exports.createProject = async (req, res, next) => {
     return res.status(201).json({ message: 'Projeto criado com sucesso.', project });
   } catch (error) {
     if (error.status) {
-      return res.status(error.status).json({ error: { code: error.code, message: error.message } });
+      return res.status(error.status).json({ error: { code: error.code, message: error.details || error.message } });
     }
     return next(error);
   }

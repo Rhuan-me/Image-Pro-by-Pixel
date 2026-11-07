@@ -2,7 +2,8 @@ function createUpdateProjectHandler({ projectRepository, validate, publishProjec
   return async function handle(command) {
     const validation = validate.safeParse(command.data);
     if (!validation.success) {
-      const error = new Error(validation.error.format());
+      const error = new Error('Dados inválidos.');
+      error.details = validation.error.format();
       error.status = 400;
       error.code = 'VALIDATION_ERROR';
       throw error;
