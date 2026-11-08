@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "coverage": "c8 --all --include=src --exclude=tests --reporter=text --reporter=lcov --check-coverage --lines 65 --functions 65 --branches 65 --statements 65 node --test tests/*.test.js"
   },
   "keywords": [],
   "author": "",
@@ -15,5 +16,8 @@
     "amqplib": "^2.2.0",
     "sharp": "^0.35.5",
     "uuid": "^14.0.3"
+  },
+  "devDependencies": {
+    "c8": "^12.0.0"
   }
 }
