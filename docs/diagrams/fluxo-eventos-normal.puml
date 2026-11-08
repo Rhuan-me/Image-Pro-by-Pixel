@@ -8,7 +8,6 @@ skinparam Shadowing false
 skinparam ArrowColor #2C3E50
 skinparam ArrowThickness 1.5
 skinparam BoxPadding 10
-skinparam ParticipantPadding 10
 
 skinparam sequence {
     GroupBorderColor #7F8C8D
@@ -26,102 +25,143 @@ box "Borda & Roteamento" #EAECEE
     participant "API Gateway\n(Node.js / Express)" as Gateway #34495E
 end box
 
-box "Microsserviços de Negócio" #E8F8F5
-    participant "Image Processing\nService (Produtor)" as ImgService #1ABC9C
-    database "PostgreSQL\n(Sequelize ORM)" as DB #16A085
+box "CQRS Write Model (Command Side)" #E8F8F5
+    participant "Command API\n(Image Processing)" as CmdService #1ABC9C
+    database "PostgreSQL (Write Store)\n[Tabelas ACID + Outbox]" as WriteDB #16A085
 end box
 
 box "Armazenamento Desacoplado" #FEF9E7
-    database "Storage / CDN\n(MinIO / S3)" as Storage #F39C12
+    database "Storage / CDN\n(MinIO / S3 / Nginx)" as Storage #F39C12
 end box
 
 box "Barramento de Mensageria (Event Bus)" #FDEDEC
     queue "RabbitMQ Exchange\n[pixpro.events] (topic)" as Exchange #E74C3C
-    queue "RabbitMQ Fila\n[image-queue] (durable)" as Queue #C0392B
+    queue "Fila de Inferência\n[image-queue] (durable)" as Queue #C0392B
+    queue "Fila de Projeção CQRS\n[read-model-sync-queue]" as SyncQueue #D35400
 end box
 
-box "Processamento Inteligente & Real-Time" #F4ECF7
-    participant "AI Worker Pool\n(Python / PyTorch)" as Worker #8E44AD
+box "Processamento IA & Notificações" #F4ECF7
+    participant "AI Worker Pool\n(Node.js / Sharp / IA)" as Worker #8E44AD
     participant "Notification Service\n(WebSocket Server)" as Notif #9B59B6
 end box
 
-== 1. Início do Fluxo: Upload e Recepção ==
+box "CQRS Read Model (Query Side)" #EBF5FB
+    participant "Read Model Projector\n(Event Consumer)" as Projector #2980B9
+    database "PostgreSQL (Read Store)\n& Redis Cache (Views)" as ReadDB #2471A3
+    participant "Query API\n(Histórico / Galeria)" as QueryService #1F618D
+end box
 
-Client -> Gateway: POST /api/images/upload (multipart/form-data)\n[Headers: Authorization (JWT), X-Correlation-ID]
+== 1. Command Path (Write Model): Recepção do Comando e Persistência Transacional ==
+
+Client -> Gateway: Command: POST /api/images/upload (multipart/form-data)\n[Headers: Authorization (JWT), X-Correlation-ID]
 activate Gateway #34495E
 
-Gateway -> Gateway: Valida Token JWT e aplica Rate-Limiting\nInjeta Header X-User-ID e repassa
-Gateway -> ImgService: Proxy HTTP: POST /api/images/upload
-activate ImgService #1ABC9C
+Gateway -> Gateway: Valida Token JWT e Rate-Limiting\nRoteia mutação para o Command Side
+Gateway -> CmdService: Encaminha UploadImageCommand
+activate CmdService #1ABC9C
 
-ImgService -> ImgService: Valida Mime Type (JPEG/PNG/WEBP)\ne tamanho máximo (10MB)
+CmdService -> CmdService: Valida Mime Type (JPEG/PNG/WEBP)\ne limite de tamanho (10MB)
 
-ImgService -> Storage: Salva binário bruto original\n(/storage/raw/usr_123/img_987.jpg)
+CmdService -> Storage: Salva binário bruto original\n(/storage/raw/usr_123/img_987.jpg)
 activate Storage #F39C12
-Storage --> ImgService: Confirmação de persistência física (URI)
+Storage --> CmdService: Confirmação de persistência física (URI)
 deactivate Storage
 
-ImgService -> DB: Image.create() / upsert()\n[Status: PENDING, FilePath, UserId]
-activate DB #16A085
-DB --> ImgService: Registro criado (imageId: img_987)
-deactivate DB
+CmdService -> WriteDB: Transação ACID Local:\n1. INSERT INTO images [Status: PENDING]\n2. INSERT INTO outbox_messages [Event: ImageUploaded]
+activate WriteDB #16A085
+WriteDB --> CmdService: Commit confirmado (imageId: img_987)
+deactivate WriteDB
 
-== 2. Emissão do Evento no Event Bus ==
+== 2. Publicação de Evento de Domínio & Sincronização Inicial do Read Model ==
 
-ImgService -> Exchange: Publica evento [ImageUploaded]\nRouting Key: image.uploaded\nPayload: { imageId, userId, filePath, originalName }
+CmdService -> Exchange: Publica evento de domínio [ImageUploaded]\nRouting Key: image.uploaded\nPayload: { imageId, userId, filePath, status: "PENDING" }
 activate Exchange #E74C3C
 
-Exchange -> Queue: Roteia mensagem para a fila 'image-queue'\n(Persistência garantida no disco)
+Exchange -> Queue: Roteia tarefa para 'image-queue' (Workers IA)
 activate Queue #C0392B
+Exchange -> SyncQueue: Roteia cópia para 'read-model-sync-queue' (CQRS)
+activate SyncQueue #D35400
 deactivate Exchange
 
-ImgService -->> Gateway: HTTP 202 Accepted\n{ success: true, imageId: "img_987", status: "PENDING" }
-deactivate ImgService
+CmdService -->> Gateway: HTTP 202 Accepted\n{ success: true, imageId: "img_987", status: "PENDING" }
+deactivate CmdService
 
-Gateway -->> Client: HTTP 202 Accepted\n(Interface do usuário exibe status "Aguardando na Fila")
+Gateway -->> Client: HTTP 202 Accepted\n(Interface exibe status "Aguardando na Fila")
 deactivate Gateway
 
-== 3. Consumo Assíncrono e Inferência de IA ==
+SyncQueue -> Projector: Consome evento [ImageUploaded]
+deactivate SyncQueue
+activate Projector #2980B9
+Projector -> ReadDB: Upsert assíncrono na projeção desnormalizada\n[image_history_view: status = PENDING] + Invalida Cache Redis
+activate ReadDB #2471A3
+ReadDB --> Projector: Projeção de leitura atualizada
+deactivate ReadDB
+deactivate Projector
+
+== 3. Consumo Assíncrono pelo Worker, Inferência de IA e Atualização do Read Model ==
 
 Worker -> Queue: Consome mensagem pendente (basic.consume)
 activate Worker #8E44AD
 Queue --> Worker: Entrega payload do evento [ImageUploaded]
 deactivate Queue
 
-Worker -> Storage: Baixa imagem original para análise\nGET /storage/raw/usr_123/img_987.jpg
+Worker -> Storage: Baixa imagem original para processamento\nGET /storage/raw/usr_123/img_987.jpg
 activate Storage #F39C12
-Storage --> Worker: Retorna binário da imagem
+Storage --> Worker: Retorna stream binário da imagem
 deactivate Storage
 
-Worker -> Worker: Executa Pipeline de IA\n• Pré-processamento e normalização\n• Inferência do Modelo (Transfer Learning / MobileNet)\n• Geração de filtros / detecção de objetos
+Worker -> Worker: Executa Pipeline de IA e Processamento\n• Otimização / Transformação (Sharp / MobileNet)\n• Extração de metadados e métricas
 
-Worker -> Storage: Faz upload do resultado processado\n(/storage/processed/usr_123/img_987_out.jpg)
+Worker -> Storage: Publica ativo final no Storage / CDN\n(/storage/processed/usr_123/img_987_out.jpg)
 activate Storage #F39C12
-Storage --> Worker: Confirmação de upload do ativo final
+Storage --> Worker: Retorna URL pública / assinada da CDN
 deactivate Storage
 
-Worker -> DB: Atualiza metadados no banco relacional\n[Status: PROCESSED, ProcessedPath, AI_Metrics]
-activate DB #16A085
-DB --> Worker: Registro atualizado com sucesso
-deactivate DB
+Worker -> WriteDB: Atualiza estado no Write Store\n[Status: PROCESSED, CdnUrl, AI_Metrics]
+activate WriteDB #16A085
+WriteDB --> Worker: Registro transacional atualizado
+deactivate WriteDB
 
-== 4. Notificação em Tempo Real ao Usuário ==
-
-Worker -> Exchange: Publica evento [ImageProcessed]\nRouting Key: image.processed\nPayload: { imageId, userId, processedFilePath, aiMetadata }
+Worker -> Exchange: Publica evento de domínio [ImageProcessed]\nRouting Key: image.processed\nPayload: { imageId, userId, cdnUrl, aiMetadata, status: "PROCESSED" }
 activate Exchange #E74C3C
 
-Exchange -> Notif: Roteia evento para o serviço de notificações
+Exchange -> SyncQueue: Roteia evento para fila de projeção CQRS
+activate SyncQueue #D35400
+Exchange -> Notif: Roteia evento para serviço de notificações
 deactivate Exchange
 activate Notif #9B59B6
 
-Worker -> Queue: Envia ACK de confirmação (basic.ack)\nRemove mensagem original da fila
+Worker -> Queue: Envia ACK de confirmação (basic.ack)
 deactivate Worker
 
-Notif -> Notif: Localiza conexão WebSocket ativa\ndo usuário (userId: usr_123)
+SyncQueue -> Projector: Consome evento [ImageProcessed]
+deactivate SyncQueue
+activate Projector #2980B9
+Projector -> ReadDB: Atualiza Read Model de forma assíncrona\n• UPSERT image_history_view (status: PROCESSED, cdnUrl, tags)\n• Atualiza Cache Redis (cache:user:usr_123:history)
+activate ReadDB #2471A3
+ReadDB --> Projector: Read Model sincronizado (Consistência Eventual)
+deactivate ReadDB
+deactivate Projector
 
-Notif -->> Client: Mensagem WebSocket (WSS Push):\n{ type: "IMAGE_READY", imageId: "img_987", url: "..." }
+== 4. Notificação em Tempo Real (WebSocket) & Consulta Otimizada (Query Path) ==
+
+Notif -> Notif: Localiza sessão WebSocket ativa (userId: usr_123)
+Notif -->> Client: Push WebSocket (WSS):\n{ type: "IMAGE_READY", imageId: "img_987", cdnUrl: "..." }
 deactivate Notif
 
-Client -> Client: Atualiza dashboard e exibe a imagem processada\n(Zero polling HTTP necessário)
+Client -> Gateway: Query: GET /api/images/history?page=1&status=PROCESSED
+activate Gateway #34495E
+Gateway -> QueryService: Roteia consulta de leitura para o Query Side
+activate QueryService #1F618D
+
+QueryService -> ReadDB: Lê projeção desnormalizada / Cache Redis\n(Sem JOINs pesados e sem bloquear o Write Store)
+activate ReadDB #2471A3
+ReadDB --> QueryService: Retorna lista paginada otimizada (< 5ms)
+deactivate ReadDB
+
+QueryService -->> Gateway: HTTP 200 OK (Histórico e URLs da CDN)
+deactivate QueryService
+Gateway -->> Client: HTTP 200 OK (Renderiza galeria e histórico atualizado)
+deactivate Gateway
 
 @enduml
