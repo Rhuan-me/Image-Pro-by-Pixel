@@ -89,7 +89,8 @@ class ImageStorageService {
           status: 'PENDING'
         });
       } catch (dbErr) {
-        console.warn(`[Sequelize] Falha ao persistir imagem ${resolvedImageId}:`, dbErr.message);
+        console.error(`[Sequelize] Falha ao atualizar status ${imageId}:`, dbErr.message);
+        throw dbErr;
       }
     }
 

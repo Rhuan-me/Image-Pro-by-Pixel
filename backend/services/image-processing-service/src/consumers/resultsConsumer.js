@@ -1,16 +1,12 @@
 const { env } = require('../config/env');
 const { getChannel } = require('../config/rabbitmq');
-const imageStorageService = require('../services/imageStorageService');
+const { ProcessImageCommand } = require('../commands/processImage.command');
+const { processImage } = require('../handlers');
 
 const RESULTS_QUEUE = 'image-results-queue';
-const STATUS_BY_EVENT = {
-    ImageProcessed: 'PROCESSED',
-    ImageProcessCompleted: 'PROCESSED',
-    ProcessingError: 'FAILED'
-};
 
 /**
- * Consome os eventos de resultado publicados pelo ai-worker e atualiza o status da imagem.
+ * Consome os eventos de resultado do ai-worker e os transforma em ProcessImageCommand.
  */
 async function startResultsConsumer() {
     const channel = getChannel();
@@ -19,7 +15,7 @@ async function startResultsConsumer() {
         return false;
     }
 
-    // Declaração idempotente (mesmos argumentos do ai-worker): evita erro se este serviço subir antes do worker
+    // Declaração idempotente (mesmos argumentos do ai-worker)
     await channel.assertExchange(env.rabbitmqExchange, 'topic', { durable: true });
     await channel.assertQueue(RESULTS_QUEUE, { durable: true });
     await channel.bindQueue(RESULTS_QUEUE, env.rabbitmqExchange, 'image.processed');
@@ -37,22 +33,24 @@ async function startResultsConsumer() {
             return channel.ack(msg);
         }
 
-        const status = STATUS_BY_EVENT[event.eventType];
-        const imageId = event.data?.imageId;
-        if (!status || !imageId) {
-            console.warn(`[ResultsConsumer] Evento ignorado (tipo: ${event.eventType}).`);
-            return channel.ack(msg);
-        }
+        const command = new ProcessImageCommand({
+            imageId: event?.data?.imageId,
+            eventType: event?.eventType,
+            processedFilePath: event?.data?.processedFilePath,
+            processedStorageUrl: event?.data?.processedStorageUrl || event?.data?.url,
+            correlationId: msg.properties?.correlationId
+        });
 
         try {
-            await imageStorageService.updateStatus(imageId, status, {
-                processedFilePath: event.data?.processedFilePath,
-                processedStorageUrl: event.data?.processedStorageUrl || event.data?.url
-            });
-            console.log(`[ResultsConsumer] ${event.eventType}: imagem ${imageId} -> ${status}`);
+            const result = await processImage(command);
+            if (result.applied) {
+                console.log(`[ResultsConsumer] ${command.eventType}: imagem ${command.imageId} -> ${result.status}`);
+            } else {
+                console.warn(`[ResultsConsumer] Evento ignorado (tipo: ${command.eventType}).`);
+            }
             channel.ack(msg);
         } catch (err) {
-            console.error(`[ResultsConsumer] Erro ao atualizar ${imageId}:`, err.message);
+            console.error(`[ResultsConsumer] Erro ao aplicar resultado de ${command.imageId}:`, err.message);
             setTimeout(() => {
                 try { channel.nack(msg, false, true); } catch { /* canal fechado: o broker reentrega */ }
             }, 2000); // devolve à fila: não perde o resultado se o banco estiver fora
