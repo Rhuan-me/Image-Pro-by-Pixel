@@ -1,6 +1,6 @@
 const express = require('express');
 const imageController = require('../controllers/imageController');
-const { uploadImageMiddleware } = require('../middlewares/uploadMiddleware');
+const uploadMiddleware = require('../middlewares/uploadMiddleware');
 
 const router = express.Router();
 
@@ -8,7 +8,7 @@ const router = express.Router();
  * Rota principal de upload de imagem:
  * POST /api/images/upload
  */
-router.post('/upload', uploadImageMiddleware, (req, res, next) => imageController.upload(req, res, next));
+router.post('/upload', uploadMiddleware.single('image'), (req, res, next) => imageController.upload(req, res, next));
 
 /**
  * Consulta de imagem por ID:

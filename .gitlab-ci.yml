@@ -48,6 +48,12 @@ test-api-gateway:
     expire_in: 1 week
   after_script:
     - redis-cli shutdown || true
+test-ai-worker:
+  stage: test
+  timeout: 2 minutes
+  script:
+    - npm --prefix backend/services/ai-worker install --cache .npm
+    - npm --prefix backend/services/ai-worker test
 
 test-auth-service:
   stage: test

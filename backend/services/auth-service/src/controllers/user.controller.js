@@ -1,8 +1,10 @@
 const userService = require('../services/user.service');
+const { GetUserQuery } = require('../queries/getUser.query');
+const { getUser } = require('../handlers');
 
 async function getMe(req, res, next) {
   try {
-    const user = await userService.getProfile(req.auth.userId);
+    const user = await getUser(new GetUserQuery({ userId: req.auth.userId }));
 
     return res.status(200).json({
       data: user

@@ -1,8 +1,11 @@
 const authService = require('../services/auth.service');
+const { RegisterCommand } = require('../commands/register.command');
+const { LoginCommand } = require('../commands/login.command');
+const { register: registerHandler, login: loginHandler } = require('../handlers');
 
 async function register(req, res, next) {
   try {
-    const user = await authService.register(req.validatedBody);
+    const user = await registerHandler(new RegisterCommand(req.validatedBody));
 
     return res.status(201).json({
       message: 'Usuário cadastrado com sucesso.',
@@ -15,7 +18,7 @@ async function register(req, res, next) {
 
 async function login(req, res, next) {
   try {
-    const result = await authService.login(req.validatedBody);
+    const result = await loginHandler(new LoginCommand(req.validatedBody));
 
     return res.status(200).json({
       message: 'Login realizado com sucesso.',

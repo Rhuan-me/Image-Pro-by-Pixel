@@ -9,6 +9,7 @@ services:
       - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
+      - image_storage:/storage
     healthcheck:
       test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep -q PONG"]
       interval: 5s
@@ -53,6 +54,27 @@ services:
     networks:
       - pixpro-network
 
+  s3-storage:
+    image: chrislusf/seaweedfs:latest
+    container_name: pixpro-storage
+    command: "server -dir=/data -s3"
+    ports:
+      - "9000:8333"
+      - "9333:9333"
+    volumes:
+      - seaweed_data:/data
+    networks:
+      - pixpro-network
+    restart: unless-stopped
+
+  storage-init:
+    image: chrislusf/seaweedfs:latest
+    container_name: pixpro-storage-init
+    depends_on:
+      - s3-storage
+    entrypoint: ["sh", "-c", "echo 'Aguardando o Storage subir...'; sleep 3; echo 's3.bucket.create -name pixpro-storage' | weed shell -master='s3-storage:9333'; echo 'Bucket verificado/criado com sucesso!';"]
+    networks:
+      - pixpro-network
   api-gateway:
     build:
       context: ../backend/services/api-gateway
@@ -107,10 +129,90 @@ services:
       - pixpro-network
     restart: unless-stopped
 
+  project-service:
+    build:
+      context: ../backend/services/project-service
+      dockerfile: Dockerfile
+    container_name: pixpro-project-service
+    env_file:
+      - ../backend/services/project-service/.env.example
+    environment:
+      NODE_ENV: development
+      PORT: 3002
+      DATABASE_URL: "postgres://${POSTGRES_USER:-pixpro}:${POSTGRES_PASSWORD:-dev-postgres-password}@postgres:5432/${POSTGRES_DB:-pixpro}"
+    ports:
+      - "127.0.0.1:3002:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - pixpro-network
+    restart: unless-stopped
+
+  image-processing-service:
+    build:
+      context: ../backend/services/image-processing-service
+      dockerfile: Dockerfile
+    container_name: pixpro-image-processing
+    environment:
+      NODE_ENV: development
+      PORT: 3003
+      DATABASE_URL: "postgres://${POSTGRES_USER:-pixpro}:${POSTGRES_PASSWORD:-dev-postgres-password}@postgres:5432/${POSTGRES_DB:-pixpro}"
+      RABBITMQ_URL: "amqp://${RABBITMQ_USER:-pixpro}:${RABBITMQ_PASSWORD:-dev-rabbit-password}@rabbitmq:5672"
+      STORAGE_BASE_PATH: /storage/raw
+      S3_ENDPOINT: "http://s3-storage:8333"
+      MINIO_ENDPOINT: "http://s3-storage:8333"
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-anykey}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-anysecret}
+      S3_BUCKET: "pixpro-storage"
+      MINIO_BUCKET: "pixpro-storage"
+    ports:
+      - "127.0.0.1:3003:3003"
+    volumes:
+      - image_storage:/storage
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      s3-storage:
+        condition: service_started
+    networks:
+      - pixpro-network
+    restart: unless-stopped
+
+  ai-worker:
+    build:
+      context: ../backend/services/ai-worker
+      dockerfile: Dockerfile
+    container_name: pixpro-ai-worker
+    environment:
+      RABBITMQ_URL: "amqp://${RABBITMQ_USER:-pixpro}:${RABBITMQ_PASSWORD:-dev-rabbit-password}@rabbitmq:5672"
+      AI_MODE: simulate
+      SIMULATE_DELAY_MS: 8000
+      S3_ENDPOINT: "http://s3-storage:8333"
+      MINIO_ENDPOINT: "http://s3-storage:8333"
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-anykey}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-anysecret}
+      S3_BUCKET: "pixpro-storage"
+      MINIO_BUCKET: "pixpro-storage"
+    volumes:
+      - image_storage:/storage
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      s3-storage:
+        condition: service_started
+    networks:
+      - pixpro-network
+    restart: unless-stopped
+
 volumes:
   redis_data:
   postgres_data:
   rabbitmq_data:
+  image_storage:
+  seaweed_data:
 
 networks:
   pixpro-network:

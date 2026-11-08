@@ -1,17 +1,17 @@
-const imageStorageService = require('../services/imageStorageService');
-const eventPublisherService = require('../services/eventPublisherService');
+const { UploadImageCommand } = require('../commands/uploadImage.command');
+const { GetImageStatusQuery } = require('../queries/getImageStatus.query');
+const { uploadImage, getImageStatus } = require('../handlers');
 
 class ImageController {
   /**
    * POST /api/images/upload
-   * Recebe imagem (multipart/form-data ou JSON), armazena em memória (e DB) e emite ImageUploaded.
+   * Valida a entrada HTTP e delega ao UploadImageCommand.
    */
   async upload(req, res, next) {
     try {
       const file = req.file;
       const body = req.body || {};
 
-      // Validação de presença do arquivo ou dados da imagem
       const hasFile = Boolean(file);
       const hasJsonData = Boolean(body.originalName && body.mimeType);
 
@@ -23,43 +23,30 @@ class ImageController {
         });
       }
 
-      // Identificação do usuário (prioridade: body, cabeçalho de proxy/auth, ou fallback)
-      const userId = body.userId || req.headers['x-user-id'] || 'usr_anonymous';
-
-      // 1. Simulação de Persistência em Memória (e banco PostgreSQL se disponível)
-      const imageRecord = await imageStorageService.storeImage({
+      const command = new UploadImageCommand({
+        userId: body.userId || req.headers['x-user-id'] || 'usr_anonymous',
+        originalName: body.originalName,
+        mimeType: body.mimeType,
         file,
-        userId,
-        originalName: file?.originalname || body.originalName,
-        mimeType: file?.mimetype || body.mimeType
+        correlationId: req.correlationId
       });
 
-      // 2. Disparo do Evento Assíncrono ImageUploaded no RabbitMQ
-      let eventPayload = null;
-      let eventStatus = 'PUBLISHED';
-      try {
-        eventPayload = await eventPublisherService.publishImageUploaded({
-          imageRecord,
-          correlationId: req.correlationId
-        });
-      } catch (eventErr) {
-        console.error('[ImageController] Falha ao despachar evento para o RabbitMQ:', eventErr.message);
-        eventStatus = 'BROKER_OFFLINE_PENDING_RETRY';
-      }
+      const { imageRecord, storageUrl, eventId, eventStatus } = await uploadImage(command);
 
-      // 3. Resposta de Aceite (HTTP 202 Accepted - processamento assíncrono padrão)
       return res.status(202).json({
         success: true,
-        message: 'Upload aceito com sucesso. Evento de processamento disparado.',
+        message: 'Upload aceito com sucesso. Imagem armazenada e evento de processamento disparado.',
         data: {
           imageId: imageRecord.id,
           userId: imageRecord.userId,
           originalName: imageRecord.originalName,
           mimeType: imageRecord.mimeType,
           filePath: imageRecord.filePath,
+          storageUrl: imageRecord.storageUrl || storageUrl,
+          url: imageRecord.storageUrl || storageUrl,
           fileSize: imageRecord.fileSize,
           status: imageRecord.status,
-          eventId: eventPayload?.eventId || null,
+          eventId,
           eventStatus,
           createdAt: imageRecord.createdAt
         }
@@ -71,28 +58,21 @@ class ImageController {
 
   /**
    * GET /api/images/:id
-   * Consulta os metadados da imagem armazenada.
+   * Delega à GetImageStatusQuery.
    */
   async getById(req, res, next) {
     try {
-      const { id } = req.params;
-      const image = await imageStorageService.getImageById(id);
+      const image = await getImageStatus(new GetImageStatusQuery({ imageId: req.params.id }));
 
       if (!image) {
         return res.status(404).json({
           success: false,
           error: 'IMAGE_NOT_FOUND',
-          message: `Nenhuma imagem encontrada com o ID '${id}'.`
+          message: `Nenhuma imagem encontrada com o ID '${req.params.id}'.`
         });
       }
 
-      // Omite o buffer binário bruto na resposta JSON
-      const { buffer, ...safeData } = image;
-
-      return res.status(200).json({
-        success: true,
-        data: safeData
-      });
+      return res.status(200).json({ success: true, data: image });
     } catch (error) {
       next(error);
     }
