@@ -1,5 +1,6 @@
 process.env.NODE_ENV = 'test';
 process.env.REDIS_ENABLED = 'false';
+process.env.JWT_ENABLED = 'true';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'pixpro-test-secret-with-at-least-32-bytes';
 process.env.JWT_ISSUER = process.env.JWT_ISSUER || 'pixpro-auth-service';
 process.env.JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'pixpro-api';
@@ -167,57 +168,74 @@ test('cors middleware blocks disallowed origins', (t, done) => {
 });
 
 test('validateEnv validates configuration rules', () => {
-  validateEnv();
-
+  const origNodeEnv = env.nodeEnv;
+  const origJwtEnabled = env.jwtEnabled;
   const origJwtSecret = env.jwtSecret;
+  const origAlgs = env.jwtAlgorithms;
+  const origKeyPath = env.jwtPublicKeyPath;
+  const origCors = env.corsOrigins;
+
   try {
+    env.nodeEnv = 'test';
+    env.jwtEnabled = true;
+    env.jwtSecret = 'pixpro-test-secret-with-at-least-32-bytes';
+    env.jwtAlgorithms = ['HS256'];
+    validateEnv();
+
+    // Rejeita HS256 sem secret
     env.jwtSecret = '';
     assert.throws(() => validateEnv(), /JWT_SECRET é obrigatório para HS256/);
-  } finally {
-    env.jwtSecret = origJwtSecret;
-  }
+    env.jwtSecret = 'pixpro-test-secret-with-at-least-32-bytes';
 
-  const origAlgs = env.jwtAlgorithms;
-  try {
+    // Rejeita algoritmo assimétrico sem caminho de chave pública
     env.jwtAlgorithms = ['RS256'];
     env.jwtPublicKeyPath = '';
     assert.throws(() => validateEnv(), /JWT_PUBLIC_KEY_PATH é obrigatório para algoritmos assimétricos/);
-  } finally {
-    env.jwtAlgorithms = origAlgs;
-  }
+    env.jwtAlgorithms = ['HS256'];
 
-  const origNodeEnv = env.nodeEnv;
-  try {
+    // Rejeita CORS com wildcard em produção
     env.nodeEnv = 'production';
     env.corsOrigins = ['*'];
     assert.throws(() => validateEnv(), /Configure CORS_ORIGINS explicitamente/);
   } finally {
     env.nodeEnv = origNodeEnv;
+    env.jwtEnabled = origJwtEnabled;
+    env.jwtSecret = origJwtSecret;
+    env.jwtAlgorithms = origAlgs;
+    env.jwtPublicKeyPath = origKeyPath;
+    env.corsOrigins = origCors;
   }
 });
 
 test('authMiddleware rejects token missing jti or exp', async () => {
-  const token = await new SignJWT({ sub: 'user-1' })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuer(process.env.JWT_ISSUER || 'pixpro-auth-service')
-    .setAudience(process.env.JWT_AUDIENCE || 'pixpro-api')
-    .sign(new TextEncoder().encode(process.env.JWT_SECRET));
+  const origJwtEnabled = env.jwtEnabled;
+  try {
+    env.jwtEnabled = true;
 
-  const req = {
-    path: '/api/protected',
-    get: (h) => (h.toLowerCase() === 'authorization' ? `Bearer ${token}` : undefined),
-    correlationId: 'cid-no-jti'
-  };
-  let status = null;
-  let body = null;
-  const res = {
-    status(s) { status = s; return this; },
-    json(b) { body = b; return this; }
-  };
-  await authMiddleware(req, res, () => {});
-  assert.equal(status, 401);
-  assert.equal(body.error.code, 'INVALID_TOKEN');
-  assert.equal(body.error.message, 'Token sem dados de sessão válidos.');
+    const token = await new SignJWT({ sub: 'user-1' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setIssuer(process.env.JWT_ISSUER || 'pixpro-auth-service')
+      .setAudience(process.env.JWT_AUDIENCE || 'pixpro-api')
+      .sign(new TextEncoder().encode(process.env.JWT_SECRET || env.jwtSecret));
+
+    const req = {
+      path: '/api/protected',
+      get: (h) => (h.toLowerCase() === 'authorization' ? `Bearer ${token}` : undefined),
+      correlationId: 'cid-no-jti'
+    };
+    let status = null;
+    let body = null;
+    const res = {
+      status(s) { status = s; return this; },
+      json(b) { body = b; return this; }
+    };
+    await authMiddleware(req, res, () => {});
+    assert.equal(status, 401);
+    assert.equal(body?.error?.code, 'INVALID_TOKEN');
+    assert.equal(body?.error?.message, 'Token sem dados de sessão válidos.');
+  } finally {
+    env.jwtEnabled = origJwtEnabled;
+  }
 });
 
 test('createProxy returns proxy middleware function', () => {
