@@ -12,9 +12,8 @@
     "coverage": "c8 --all --include=src --exclude=tests --reporter=text --reporter=lcov --check-coverage --lines 80 --functions 80 --branches 80 --statements 80 node --test tests/*.test.js"
   },
   "dependencies": {
-    "amqplib": "^0.10.9",
-    "argon2": "^0.44.0",
     "amqplib": "^0.10.5",
+    "argon2": "^0.44.0",
     "dotenv": "^16.4.7",
     "express": "^5.1.0",
     "jose": "^6.2.13",
