@@ -6,10 +6,13 @@
   "scripts": {
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
+    "test": "node --test tests/*.test.js",
     "db:migrate": "sequelize-cli db:migrate",
-    "db:migrate:undo": "sequelize-cli db:migrate:undo"
+    "db:migrate:undo": "sequelize-cli db:migrate:undo",
+    "coverage": "c8 --all --include=src --exclude=tests --reporter=text --reporter=lcov --check-coverage --lines 65 --functions 65 --branches 65 --statements 65 node --test tests/*.test.js"
   },
   "dependencies": {
+    "amqplib": "^0.10.5",
     "argon2": "^0.44.0",
     "dotenv": "^16.4.7",
     "express": "^5.1.0",
@@ -21,6 +24,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "c8": "^12.0.0",
     "nodemon": "^3.1.10",
     "sequelize-cli": "^6.6.3"
   }

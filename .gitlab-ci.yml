@@ -1,3 +1,4 @@
+
 stages:
   - build
   - test
@@ -18,8 +19,9 @@ build-services:
   stage: build
   timeout: 5 minutes
   script:
-    - npm --prefix backend/services/api-gateway install --cache .npm
-    - npm --prefix backend/services/auth-service install --cache .npm
+    - npm --prefix backend/services/api-gateway ci --cache .npm
+    - npm --prefix backend/services/auth-service ci --cache .npm
+    - npm --prefix backend/services/image-processing-service ci --cache .npm
     - node --check backend/services/api-gateway/src/app.js
     - node --check backend/services/api-gateway/src/server.js
     - node --check backend/services/api-gateway/src/config/env.js
@@ -29,33 +31,21 @@ build-services:
 
 test-api-gateway:
   stage: test
-  timeout: 2 minutes
+  timeout: 5 minutes
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends redis-server
     - redis-server --daemonize yes
     - redis-cli ping
-    - npm --prefix backend/services/api-gateway install --cache .npm
+    - npm --prefix backend/services/api-gateway ci --cache .npm
   script:
-    - |
-      set +e
-      timeout --signal=TERM --kill-after=5s 30s node --test backend/services/api-gateway/tests/*.test.js > test-output.log 2>&1
-      test_status=$?
-      cat test-output.log
-
-      passed_count=$(grep -c '^ok [1-4] ' test-output.log || true)
-      failed_count=$(grep -c '^not ok ' test-output.log || true)
-
-      if [ "$test_status" -eq 0 ]; then
-        exit 0
-      fi
-
-      if [ "$test_status" -eq 124 ] && [ "$passed_count" -eq 4 ] && [ "$failed_count" -eq 0 ]; then
-        echo "Os quatro testes passaram; o processo foi encerrado pelo limite de tempo."
-        exit 0
-      fi
-
-      exit "$test_status"
+    - npm --prefix backend/services/api-gateway run coverage
+  coverage: '/All files\s*\|\s*[\d.]+\s*\|\s*[\d.]+\s*\|\s*[\d.]+\s*\|\s*([\d.]+)/'
+  artifacts:
+    when: always
+    paths:
+      - backend/services/api-gateway/coverage/
+    expire_in: 1 week
   after_script:
     - redis-cli shutdown || true
 test-ai-worker:
@@ -64,6 +54,32 @@ test-ai-worker:
   script:
     - npm --prefix backend/services/ai-worker install --cache .npm
     - npm --prefix backend/services/ai-worker test
+
+test-auth-service:
+  stage: test
+  timeout: 5 minutes
+  script:
+    - npm --prefix backend/services/auth-service ci --cache .npm
+    - npm --prefix backend/services/auth-service run coverage
+  coverage: '/All files\s*\|\s*[\d.]+\s*\|\s*[\d.]+\s*\|\s*[\d.]+\s*\|\s*([\d.]+)/'
+  artifacts:
+    when: always
+    paths:
+      - backend/services/auth-service/coverage/
+    expire_in: 1 week
+
+test-image-processing:
+  stage: test
+  timeout: 5 minutes
+  script:
+    - npm --prefix backend/services/image-processing-service ci --cache .npm
+    - npm --prefix backend/services/image-processing-service run coverage
+  coverage: '/All files\s*\|\s*[\d.]+\s*\|\s*[\d.]+\s*\|\s*[\d.]+\s*\|\s*([\d.]+)/'
+  artifacts:
+    when: always
+    paths:
+      - backend/services/image-processing-service/coverage/
+    expire_in: 1 week
 
 build-and-push-images:
   stage: deploy
@@ -81,9 +97,9 @@ build-and-push-images:
   before_script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" --username "$CI_REGISTRY_USER" --password-stdin
   script:
-      - docker build --pull -t "$CI_REGISTRY_IMAGE/api-gateway:$CI_COMMIT_SHORT_SHA" -t "$CI_REGISTRY_IMAGE/api-gateway:latest" backend/services/api-gateway
-      - docker push "$CI_REGISTRY_IMAGE/api-gateway:$CI_COMMIT_SHORT_SHA"
-      - docker push "$CI_REGISTRY_IMAGE/api-gateway:latest"
-      - docker build --pull -t "$CI_REGISTRY_IMAGE/auth-service:$CI_COMMIT_SHORT_SHA" -t "$CI_REGISTRY_IMAGE/auth-service:latest" backend/services/auth-service
-      - docker push "$CI_REGISTRY_IMAGE/auth-service:$CI_COMMIT_SHORT_SHA"
-      - docker push "$CI_REGISTRY_IMAGE/auth-service:latest"
+    - docker build --pull -t "$CI_REGISTRY_IMAGE/api-gateway:$CI_COMMIT_SHORT_SHA" -t "$CI_REGISTRY_IMAGE/api-gateway:latest" backend/services/api-gateway
+    - docker push "$CI_REGISTRY_IMAGE/api-gateway:$CI_COMMIT_SHORT_SHA"
+    - docker push "$CI_REGISTRY_IMAGE/api-gateway:latest"
+    - docker build --pull -t "$CI_REGISTRY_IMAGE/auth-service:$CI_COMMIT_SHORT_SHA" -t "$CI_REGISTRY_IMAGE/auth-service:latest" backend/services/auth-service
+    - docker push "$CI_REGISTRY_IMAGE/auth-service:$CI_COMMIT_SHORT_SHA"
+    - docker push "$CI_REGISTRY_IMAGE/auth-service:latest"
