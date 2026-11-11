@@ -36,3 +36,25 @@ exports.deleteProject = async (projectInstance) => {
   await projectInstance.destroy();
   return { message: 'Projeto excluído com sucesso.' };
 };
+
+exports.addImageToProject = async (projectId, userId, body) => {
+  const validation = addImageToProjectSchema.safeParse(body);
+  if (!validation.success) {
+    throw createError(400, 'VALIDATION_ERROR', validation.error.format());
+  }
+
+  const project = await Project.findOne({ where: { id: projectId, userId } });
+  if (!project) {
+    throw createError(404, 'NOT_FOUND', 'Projeto não encontrado.');
+  }
+
+  const { imageId, metadata } = validation.data;
+
+  const imageProjectLink = await ImageProject.create({
+    projectId,
+    imageId,
+    metadata
+  });
+
+  return imageProjectLink;
+};

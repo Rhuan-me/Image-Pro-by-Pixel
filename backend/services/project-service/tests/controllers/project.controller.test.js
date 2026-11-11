@@ -1,7 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const projectController = require('../../src/controllers/project.controller');
-const projectService = require('../../src/services/project.service');
 const handlers = require('../../src/handlers');
 
 test('projectController.listProjects - deve responder com 200 e a lista de projetos', async () => {
@@ -110,11 +109,8 @@ test('projectController.getProjectById - deve responder com 200 ou tratar erro',
 });
 
 test('projectController.deleteProject - deve responder com 200 ou tratar erro', async () => {
-  const origGet = projectService.getProjectById;
-  const origDel = projectService.deleteProject;
-
-  projectService.getProjectById = async () => ({ id: 'p1' });
-  projectService.deleteProject = async () => ({ message: 'Projeto excluído com sucesso.' });
+  const origDelete = handlers.deleteProject;
+  handlers.deleteProject = async () => ({ message: 'Projeto excluído com sucesso.' });
 
   const req = { headers: {}, params: { id: 'p1' } };
   let statusCode = null;
@@ -136,16 +132,52 @@ test('projectController.deleteProject - deve responder com 200 ou tratar erro', 
   const notFoundErr = new Error('Not found');
   notFoundErr.status = 404;
   notFoundErr.code = 'NOT_FOUND';
-  projectService.getProjectById = async () => { throw notFoundErr; };
+  handlers.deleteProject = async () => { throw notFoundErr; };
   await projectController.deleteProject(req, res, () => {});
   assert.equal(statusCode, 404);
 
   // Unhandled error
   let nextErr = null;
-  projectService.getProjectById = async () => { throw new Error('boom'); };
+  handlers.deleteProject = async () => { throw new Error('boom'); };
   await projectController.deleteProject(req, res, (e) => { nextErr = e; });
   assert.ok(nextErr);
 
-  projectService.getProjectById = origGet;
-  projectService.deleteProject = origDel;
+  handlers.deleteProject = origDelete;
+});
+
+test('projectController.addImageToProject - deve responder com 201 ou tratar erro', async () => {
+  const origAddImage = handlers.addImageToProject;
+  handlers.addImageToProject = async () => ({ id: 'link_1', projectId: 'p1', imageId: 'img_123' });
+
+  const req = { headers: {}, params: { id: 'p1' }, body: { imageId: 'img_123' } };
+  let statusCode = null;
+  let responseBody = null;
+  const res = {
+    status(code) {
+      statusCode = code;
+      return {
+        json(body) { responseBody = body; }
+      };
+    }
+  };
+
+  await projectController.addImageToProject(req, res, () => {});
+  assert.equal(statusCode, 201);
+  assert.equal(responseBody.data.imageId, 'img_123');
+
+  // Error with status (ex: 400 Validation Error)
+  const validationErr = new Error('Validation failed');
+  validationErr.status = 400;
+  validationErr.code = 'VALIDATION_ERROR';
+  handlers.addImageToProject = async () => { throw validationErr; };
+  await projectController.addImageToProject(req, res, () => {});
+  assert.equal(statusCode, 400);
+
+  // Unhandled error
+  let nextErr = null;
+  handlers.addImageToProject = async () => { throw new Error('db error'); };
+  await projectController.addImageToProject(req, res, (e) => { nextErr = e; });
+  assert.ok(nextErr);
+
+  handlers.addImageToProject = origAddImage;
 });
