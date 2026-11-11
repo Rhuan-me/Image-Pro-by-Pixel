@@ -32,8 +32,13 @@ const addImageToProjectSchema = z.object({
   metadata: z.record(z.any()).optional()
 }).strict();
 
+const removeImageFromProjectSchema = z.object({
+  imageId: z.string().min(1, 'O ID da imagem é obrigatório.')
+}).strict();
+
 module.exports = { 
   createProjectSchema, 
   updateProjectSchema, 
-  addImageToProjectSchema 
+  addImageToProjectSchema,
+  removeImageFromProjectSchema
 };

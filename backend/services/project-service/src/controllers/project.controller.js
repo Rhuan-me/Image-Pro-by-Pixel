@@ -1,9 +1,12 @@
 const { CreateProjectCommand } = require('../commands/createProject.command');
 const { DeleteProjectCommand } = require('../commands/deleteProject.command');
 const { AddImageToProjectCommand } = require('../commands/addImageToProject.command');
+const { RemoveImageFromProjectCommand } = require('../commands/removeImageFromProject.command');
 
 const { ListProjectsQuery } = require('../queries/listProjects.query');
 const { GetProjectByIdQuery } = require('../queries/getProjectById.query');
+const { ListProjectImagesQuery } = require('../queries/listProjectImages.query');
+
 const handlers = require('../handlers');
 
 const getUserId = (req) => req.headers['x-user-id'] || 'usr_anonymous';
@@ -80,6 +83,40 @@ exports.addImageToProject = async (req, res, next) => {
   } catch (error) {
     if (error.status) {
       return res.status(error.status).json({ error: { code: error.code, message: error.details || error.message } });
+    }
+    return next(error);
+  }
+};
+
+exports.listProjectImages = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = getUserId(req);
+
+    const images = await handlers.listProjectImages(new ListProjectImagesQuery({ id, userId }));
+
+    return res.status(200).json({ images });
+  } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ error: { code: error.code, message: error.message } });
+    }
+    return next(error);
+  }
+};
+
+exports.removeImageFromProject = async (req, res, next) => {
+  try {
+    const { id: projectId, imageId } = req.params;
+    const userId = getUserId(req);
+
+    const result = await handlers.removeImageFromProject(
+      new RemoveImageFromProjectCommand({ projectId, imageId, userId })
+    );
+
+    return res.status(200).json(result);
+  } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ error: { code: error.code, message: error.message } });
     }
     return next(error);
   }

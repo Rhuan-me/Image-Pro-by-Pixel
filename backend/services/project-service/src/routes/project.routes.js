@@ -5,7 +5,9 @@ const {
   listProjects,
   getProjectById,
   deleteProject,
-  addImageToProject
+  addImageToProject,
+  listProjectImages,
+  removeImageFromProject
 } = require('../controllers/project.controller');
 
 const router = Router();
@@ -16,5 +18,7 @@ router.get('/:id', getProjectById);
 router.delete('/:id', deleteProject);
 
 router.post('/:id/images', addImageToProject);
+router.get('/:id/images', listProjectImages);
+router.delete('/:id/images/:imageId', removeImageFromProject);
 
 module.exports = router;
