@@ -1,5 +1,7 @@
-const projectService = require('../services/project.service');
 const { CreateProjectCommand } = require('../commands/createProject.command');
+const { DeleteProjectCommand } = require('../commands/deleteProject.command');
+const { AddImageToProjectCommand } = require('../commands/addImageToProject.command');
+
 const { ListProjectsQuery } = require('../queries/listProjects.query');
 const { GetProjectByIdQuery } = require('../queries/getProjectById.query');
 const handlers = require('../handlers');
@@ -51,10 +53,7 @@ exports.deleteProject = async (req, res, next) => {
   try {
     const { id } = req.params;
     const userId = getUserId(req);
-
-    const project = await projectService.getProjectById(id, userId);
-    const result = await projectService.deleteProject(project);
-
+    const result = await handlers.deleteProject(new DeleteProjectCommand({ id, userId }));
     return res.status(200).json(result);
   } catch (error) {
     if (error.status) {
@@ -63,3 +62,26 @@ exports.deleteProject = async (req, res, next) => {
     return next(error);
   }
 };
+
+exports.addImageToProject = async (req, res, next) => {
+  try {
+    const { id: projectId } = req.params;
+    const userId = getUserId(req);
+
+    console.log("projectId:", projectId, "userId:", userId, "body:", req.body)
+    const imageProject = await handlers.addImageToProject(
+      new AddImageToProjectCommand({ projectId, userId, body: req.body })
+    );
+
+    return res.status(201).json({
+      message: 'Imagem adicionada ao projeto com sucesso.',
+      data: imageProject
+    });
+  } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ error: { code: error.code, message: error.details || error.message } });
+    }
+    return next(error);
+  }
+};
+

@@ -27,4 +27,13 @@ const updateProjectSchema = z.object({
     .optional()
 }).strict();
 
-module.exports = { createProjectSchema, updateProjectSchema };
+const addImageToProjectSchema = z.object({
+  imageId: z.string().min(1, 'O ID da imagem é obrigatório.'),
+  metadata: z.record(z.any()).optional()
+}).strict();
+
+module.exports = { 
+  createProjectSchema, 
+  updateProjectSchema, 
+  addImageToProjectSchema 
+};
