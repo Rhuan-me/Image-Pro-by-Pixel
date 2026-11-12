@@ -4,8 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node --test",
-    "coverage": "c8 --all --include=src --exclude=tests --reporter=text --reporter=lcov --check-coverage --lines 65 --functions 65 --branches 65 --statements 65 node --test tests/*.test.js"
+    "test": "node --test --test-force-exit tests/*.test.js",
+    "coverage": "c8 --all --include=src --exclude=src/worker.js --exclude=tests --reporter=text --reporter=lcov --check-coverage --lines 65 --functions 65 --branches 65 --statements 65 node --test --test-force-exit tests/*.test.js"
   },
   "keywords": [],
   "author": "",

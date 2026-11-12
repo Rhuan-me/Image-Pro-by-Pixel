@@ -238,7 +238,106 @@ test('authMiddleware rejects token missing jti or exp', async () => {
   }
 });
 
-test('createProxy returns proxy middleware function', () => {
-  const proxy = createProxy('http://localhost:3000');
-  assert.equal(typeof proxy, 'function');
+test('createProxy returns proxy middleware function and covers proxy callbacks', async () => {
+  const { redisClient } = require('../src/config/redis');
+  assert.equal(await redisClient.get(), null);
+  await redisClient.sendCommand();
+  await redisClient.quit();
+
+  const hpmPath = require.resolve('http-proxy-middleware');
+  const origHpmExports = require.cache[hpmPath].exports;
+  let capturedOptions = null;
+  require.cache[hpmPath].exports = {
+    createProxyMiddleware: (opts) => {
+      capturedOptions = opts;
+      return origHpmExports.createProxyMiddleware(opts);
+    }
+  };
+  delete require.cache[require.resolve('../src/proxy/createProxy')];
+  const { createProxy: freshCreateProxy } = require('../src/proxy/createProxy');
+
+  try {
+    const proxy = freshCreateProxy('http://localhost:3000');
+    assert.equal(typeof proxy, 'function');
+    assert.ok(capturedOptions);
+
+    // pathRewrite
+    assert.equal(capturedOptions.pathRewrite('/old', { originalUrl: '/api/projects/1' }), '/api/projects/1');
+
+    // on.proxyReq
+    const headers = {};
+    const fakeProxyReq = { setHeader: (k, v) => { headers[k] = v; } };
+    capturedOptions.on.proxyReq(fakeProxyReq, { correlationId: 'cid-99', auth: { userId: 'u-99' } });
+    assert.equal(headers['x-correlation-id'], 'cid-99');
+    assert.equal(headers['x-user-id'], 'u-99');
+
+    // on.error when headersSent = true
+    capturedOptions.on.error(new Error('fail'), {}, { headersSent: true });
+
+    // on.error 503
+    let errStatus = null;
+    let errPayload = null;
+    const fakeRes = {
+      headersSent: false,
+      writeHead(s) { errStatus = s; },
+      end(b) { errPayload = JSON.parse(b); }
+    };
+    capturedOptions.on.error(new Error('conn refused'), { correlationId: 'cid-503' }, fakeRes);
+    assert.equal(errStatus, 503);
+    assert.equal(errPayload.error.code, 'UPSTREAM_UNAVAILABLE');
+
+    // on.error 504 timeout
+    const timeoutErr = new Error('timed out');
+    timeoutErr.code = 'ETIMEDOUT';
+    capturedOptions.on.error(timeoutErr, {}, fakeRes);
+    assert.equal(errStatus, 504);
+    assert.equal(errPayload.error.code, 'UPSTREAM_TIMEOUT');
+  } finally {
+    require.cache[hpmPath].exports = origHpmExports;
+  }
+});
+
+test('authMiddleware handles revoked token and redis errors', async () => {
+  const { redisClient } = require('../src/config/redis');
+  const origGet = redisClient.get;
+  const origJwtEnabled = env.jwtEnabled;
+  try {
+    env.jwtEnabled = true;
+    const now = Math.floor(Date.now() / 1000);
+    const token = await new SignJWT({ sub: 'user-revoked' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setJti('jti-revoked-1')
+      .setIssuedAt(now - 10)
+      .setExpirationTime(now + 600)
+      .setIssuer(process.env.JWT_ISSUER || 'pixpro-auth-service')
+      .setAudience(process.env.JWT_AUDIENCE || 'pixpro-api')
+      .sign(new TextEncoder().encode(process.env.JWT_SECRET || env.jwtSecret));
+
+    const req = {
+      path: '/api/protected',
+      get: (h) => (h.toLowerCase() === 'authorization' ? `Bearer ${token}` : undefined),
+      correlationId: 'cid-rev'
+    };
+
+    // 1. Revoked token -> 401 TOKEN_REVOKED
+    redisClient.get = async () => '1';
+    let status = null;
+    let body = null;
+    const res = {
+      status(s) { status = s; return this; },
+      json(b) { body = b; return this; }
+    };
+    await authMiddleware(req, res, () => {});
+    assert.equal(status, 401);
+    assert.equal(body.error.code, 'TOKEN_REVOKED');
+
+    // 2. Redis failure -> 503 SESSION_STORE_UNAVAILABLE
+    redisClient.get = async () => { throw new Error('redis down'); };
+    await authMiddleware(req, res, () => {});
+    assert.equal(status, 503);
+    assert.equal(body.error.code, 'SESSION_STORE_UNAVAILABLE');
+  } finally {
+    redisClient.get = origGet;
+    env.jwtEnabled = origJwtEnabled;
+  }
 });

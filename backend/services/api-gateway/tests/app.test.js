@@ -25,6 +25,12 @@ test('GET /live retorna ALIVE', async () => {
   assert.equal(response.body.status, 'ALIVE');
 });
 
+test('GET /ready retorna READY', async () => {
+  const response = await request(app).get('/ready');
+  assert.equal(response.status, 200);
+  assert.equal(response.body.status, 'READY');
+});
+
 test('requisição recebe correlation id', async () => {
   const response = await request(app).get('/health').set('x-correlation-id', 'test-123');
   assert.equal(response.headers['x-correlation-id'], 'test-123');
