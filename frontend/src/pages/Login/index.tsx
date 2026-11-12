@@ -1,12 +1,9 @@
+
 import React from 'react';
+import { AuthForm } from '../../components/Auth/AuthForm';
 
 export const LoginPage: React.FC = () => {
-  return (
-    <div style={{ padding: '2rem', textAlign: 'center' }}>
-      <h1>Login</h1>
-      <p>Placeholder: Pagina de autenticacao de usuarios.</p>
-    </div>
-  );
+  return <AuthForm initialMode="login" />;
 };
 
 export default LoginPage;

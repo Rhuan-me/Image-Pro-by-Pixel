@@ -4,6 +4,9 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { createHandler } = require('../src/handler');
+const workerStorageService = require('../src/services/storage');
+
+workerStorageService.client.send = async () => ({ ETag: 'mock-etag' });
 
 const VALID_IMAGE_BUFFER = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
