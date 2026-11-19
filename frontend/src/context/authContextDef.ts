@@ -1,3 +1,4 @@
+
 import { createContext } from 'react';
 
 export interface User {
@@ -11,8 +12,14 @@ export interface AuthContextData {
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  signIn: (token: string, user: User) => void;
+  signIn: (
+    token: string,
+    user: User,
+    expiresInSeconds: number
+  ) => void;
   signOut: () => void;
 }
 
-export const AuthContext = createContext<AuthContextData>({} as AuthContextData);
+export const AuthContext = createContext<AuthContextData>(
+  {} as AuthContextData
+);
