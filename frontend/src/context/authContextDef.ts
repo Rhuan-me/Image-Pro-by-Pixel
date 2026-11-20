@@ -12,12 +12,12 @@ export interface AuthContextData {
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  signIn: (
-    token: string,
-    user: User,
-    expiresInSeconds: number
-  ) => void;
-  signOut: () => void;
+
+  login: (email: string, password: string) => Promise<void>;
+
+  register: (email: string, password: string) => Promise<void>;
+
+  signOut: () => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextData>(
