@@ -7,10 +7,12 @@
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
-    "test": "node --test",
+    "test": "node --test --test-force-exit tests/*.test.js",
+    "test:cross-instance": "node scripts/test-cross-instance.js",
+    "test:reconnect": "node scripts/ws-client-reconnect.js",
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "coverage": "c8 --all --include=src --exclude=tests --reporter=text --reporter=lcov --check-coverage --lines 65 --functions 65 --branches 65 --statements 65 node --test tests/*.test.js"
+    "coverage": "c8 --all --include=src --exclude=tests --reporter=text --reporter=lcov --check-coverage --lines 65 --functions 65 --branches 65 --statements 65 node --test --test-force-exit tests/*.test.js"
   },
   "dependencies": {
     "amqplib": "^2.3.1",

@@ -1,3 +1,4 @@
+const os = require('node:os');
 const path = require('node:path');
 require('dotenv').config();
 
@@ -7,9 +8,16 @@ const number = (value, fallback) => { const n = Number(value); return Number.isF
 const env = {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: number(process.env.PORT, 4000),
+  instanceId: process.env.INSTANCE_ID || `notification-hub-${os.hostname()}-${process.env.PORT || 4000}`,
   logLevel: process.env.LOG_LEVEL || 'dev',
   corsOrigins: csv(process.env.CORS_ORIGINS, 'http://localhost:5173,http://localhost:3000'),
   authServiceUrl: process.env.AUTH_SERVICE_URL || 'http://localhost:3001',
+  redisUrl: process.env.REDIS_URL || 'redis://:dev-redis-password@redis:6379',
+  redisBackplaneChannel: process.env.REDIS_BACKPLANE_CHANNEL || 'pixpro:notifications:backplane',
+  rabbitmqUrl: process.env.RABBITMQ_URL || 'amqp://pixpro:dev-rabbit-password@rabbitmq:5672',
+  rabbitmqExchange: process.env.RABBITMQ_EXCHANGE || 'pixpro.events',
+  rabbitmqQueue: process.env.RABBITMQ_QUEUE || 'image-queue',
+  rabbitmqRoutingKey: process.env.RABBITMQ_ROUTING_KEY || 'image.uploaded',
   rateLimitWindowMs: number(process.env.RATE_LIMIT_WINDOW_MS, 60000),
   rateLimitMax: number(process.env.RATE_LIMIT_MAX, 120),
   authRateLimitMax: number(process.env.AUTH_RATE_LIMIT_MAX, 20),

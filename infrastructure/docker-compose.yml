@@ -206,23 +206,24 @@ services:
     networks:
       - pixpro-network
     restart: unless-stopped
-  notification-service:
+  notification-service-1:
     build:
       context: ../backend/services/notification-service
       dockerfile: Dockerfile
-    container_name: pixpro-notification-service
+    container_name: pixpro-notification-service-1
     environment:
       NODE_ENV: development
       PORT: 4000
+      INSTANCE_ID: notification-service-1
       LOG_LEVEL: dev
       CORS_ORIGINS: "https://localhost:5173,https://localhost:3000,http://localhost:5173,http://localhost:3000"
       AUTH_SERVICE_URL: "http://auth-service:3001"
-      # Apontando para os nomes corretos dos serviços dentro da rede Docker (e não localhost)
       RABBITMQ_URL: "amqp://${RABBITMQ_USER:-pixpro}:${RABBITMQ_PASSWORD:-dev-rabbit-password}@rabbitmq:5672"
       RABBITMQ_EXCHANGE: "pixpro.events"
       RABBITMQ_QUEUE: "image-queue"
       RABBITMQ_ROUTING_KEY: "image.uploaded"
       REDIS_URL: "redis://:${REDIS_PASSWORD:-dev-redis-password}@redis:6379"
+      REDIS_BACKPLANE_CHANNEL: "pixpro:notifications:backplane"
       REDIS_KEY_PREFIX: "pixpro:notification:rl:"
       RATE_LIMIT_WINDOW_MS: 60000
       RATE_LIMIT_MAX: 120
@@ -235,6 +236,49 @@ services:
       JWT_REVOKED_PREFIX: "pixpro:auth:revoked:"
     ports:
       - "127.0.0.1:4000:4000"
+    volumes:
+      - ../backend/services/notification-service/certs:/app/certs
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      image-processing-service:
+        condition: service_started
+    networks:
+      - pixpro-network
+    restart: unless-stopped
+
+  notification-service-2:
+    build:
+      context: ../backend/services/notification-service
+      dockerfile: Dockerfile
+    container_name: pixpro-notification-service-2
+    environment:
+      NODE_ENV: development
+      PORT: 4001
+      INSTANCE_ID: notification-service-2
+      LOG_LEVEL: dev
+      CORS_ORIGINS: "https://localhost:5173,https://localhost:3000,http://localhost:5173,http://localhost:3000"
+      AUTH_SERVICE_URL: "http://auth-service:3001"
+      RABBITMQ_URL: "amqp://${RABBITMQ_USER:-pixpro}:${RABBITMQ_PASSWORD:-dev-rabbit-password}@rabbitmq:5672"
+      RABBITMQ_EXCHANGE: "pixpro.events"
+      RABBITMQ_QUEUE: "image-queue"
+      RABBITMQ_ROUTING_KEY: "image.uploaded"
+      REDIS_URL: "redis://:${REDIS_PASSWORD:-dev-redis-password}@redis:6379"
+      REDIS_BACKPLANE_CHANNEL: "pixpro:notifications:backplane"
+      REDIS_KEY_PREFIX: "pixpro:notification:rl:"
+      RATE_LIMIT_WINDOW_MS: 60000
+      RATE_LIMIT_MAX: 120
+      AUTH_RATE_LIMIT_MAX: 20
+      JWT_ENABLED: "true"
+      JWT_ALGORITHMS: "HS256"
+      JWT_SECRET: "9OIO4sUpcFBu52TfMIg-_aiPci1KOJtmTPQaQDSreV0"
+      JWT_ISSUER: "pixpro-auth-service"
+      JWT_AUDIENCE: "pixpro-api"
+      JWT_REVOKED_PREFIX: "pixpro:auth:revoked:"
+    ports:
+      - "127.0.0.1:4001:4001"
     volumes:
       - ../backend/services/notification-service/certs:/app/certs
     depends_on:

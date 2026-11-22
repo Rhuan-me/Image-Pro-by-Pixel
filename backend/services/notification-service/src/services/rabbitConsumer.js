@@ -1,63 +1,77 @@
 const amqp = require('amqplib');
 const { env } = require('../config/env');
+const { publishToBackplane, deliverLocalNotification } = require('./redisBackplane');
 
 async function startRabbitConsumer(activeConnections) {
   try {
     const rabbitUrl = env.rabbitmqUrl || 'amqp://pixpro:dev-rabbit-password@rabbitmq:5672';
-    console.log(`[RabbitMQ Consumer] Conectando ao broker em ${rabbitUrl.replace(/:[^:@]+@/, ':***@')}...`);
-    
+    console.log(`[RabbitMQ Consumer][${env.instanceId}] Conectando ao broker em ${rabbitUrl.replace(/:[^:@]+@/, ':***@')}...`);
+
     const connection = await amqp.connect(rabbitUrl);
     const channel = await connection.createChannel();
 
     const exchange = env.rabbitmqExchange || 'pixpro.events';
     const queueName = env.rabbitmqQueue || 'image-queue';
-    const routingKey = env.rabbitmqRoutingKey || 'image.uploaded'; 
+    const routingKey = env.rabbitmqRoutingKey || 'image.uploaded';
 
-    // Garante apenas a Exchange. A fila 'image-queue' já foi declarada pelo worker de processamento.
     await channel.assertExchange(exchange, 'topic', { durable: true });
     await channel.bindQueue(queueName, exchange, routingKey);
 
-    console.log(`[RabbitMQ Consumer] Conectado e escutando fila existente '${queueName}' com a routing key '${routingKey}'.`);
+    console.log(`[RabbitMQ Consumer][${env.instanceId}] Conectado e escutando fila '${queueName}' (routing key '${routingKey}').`);
 
-    channel.consume(queueName, (msg) => {
+    channel.consume(queueName, async (msg) => {
       if (msg !== null) {
         try {
           const rawContent = JSON.parse(msg.content.toString());
-          console.log('[RabbitMQ Consumer] Evento recebido:', rawContent);
+          console.log(`[RabbitMQ Consumer][${env.instanceId}] Evento recebido:`, rawContent);
 
           const eventData = rawContent.data || rawContent;
           const userId = eventData.userId;
-          
-          if (userId && activeConnections.has(userId)) {
-            const clientWs = activeConnections.get(userId);
+          const isSuccess = eventData.status === 'COMPLETED' || eventData.status === 'PROCESSED' || rawContent.eventType === 'ImageProcessed';
 
-            clientWs.send(JSON.stringify({
-              type: 'NOTIFICATION',
-              event: rawContent.eventType || 'ImageStatusChanged',
-              data: {
-                imageId: eventData.imageId,
-                status: eventData.status,
-                processedStorageUrl: eventData.processedStorageUrl,
-                message: eventData.status === 'COMPLETED' ? 'Sua imagem foi processada com sucesso!' : 'Falha no processamento da imagem.'
-              },
+          const notificationPayload = {
+            type: 'NOTIFICATION',
+            event: rawContent.eventType || 'ImageStatusChanged',
+            data: {
+              imageId: eventData.imageId,
+              userId,
+              status: eventData.status || (isSuccess ? 'PROCESSED' : 'PENDING'),
+              processedStorageUrl: eventData.processedStorageUrl,
+              message: isSuccess
+                ? 'Sua imagem foi processada com sucesso!'
+                : 'Atualização no processamento da imagem.'
+            },
+            timestamp: Date.now()
+          };
+
+          // Publica no Redis Backplane para alcançar o cliente mesmo que esteja conectado em outra instância do hub
+          try {
+            await publishToBackplane({
+              targetUserId: userId || null,
+              broadcast: !userId,
+              payload: notificationPayload
+            });
+          } catch (redisErr) {
+            console.warn(`[RabbitMQ Consumer][${env.instanceId}] Fallback local (Redis Backplane indisponível): ${redisErr.message}`);
+            deliverLocalNotification(activeConnections, {
+              eventId: rawContent.eventId || `local-${Date.now()}`,
+              originInstance: env.instanceId,
+              targetUserId: userId,
+              broadcast: !userId,
+              payload: notificationPayload,
               timestamp: Date.now()
-            }));
-
-            console.log(`[WebSocket] Notificação despachada para o usuário ID: ${userId}`);
-          } else {
-            console.log(`[WebSocket] Usuário ${userId || 'desconhecido'} não conectado via WSS. Mensagem confirmada (ack).`);
+            });
           }
 
           channel.ack(msg);
         } catch (err) {
-          console.error('[RabbitMQ Consumer] Erro ao processar mensagem da fila:', err.message);
+          console.error(`[RabbitMQ Consumer][${env.instanceId}] Erro ao processar mensagem da fila:`, err.message);
           channel.nack(msg, false, false);
         }
       }
     });
-
   } catch (error) {
-    console.error('[RabbitMQ Consumer] Erro crítico na conexão com o broker:', error.message);
+    console.error(`[RabbitMQ Consumer][${env.instanceId}] Erro crítico na conexão com o broker:`, error.message);
     setTimeout(() => startRabbitConsumer(activeConnections), 5000);
   }
 }
