@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>PixPro Notification Hub (WSS & Redis Backplane) - AsyncAPI 1.0.0 Documentation</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/@asyncapi/react-component@1.4.2/styles/default.min.css">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background-color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    .asyncapi-header-banner {
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #1e293b;
+      font-size: 13px;
+    }
+    .asyncapi-header-banner span.badge {
+      background: #2563eb;
+      color: #fff;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="asyncapi-header-banner">
+    <div><strong>PixPro Capstone</strong> — Documentação Oficial AsyncAPI 2.6.0 (`notification-service` WSS + Redis Backplane)</div>
+    <span class="badge">AsyncAPI 2.6.0 • Validated</span>
+  </div>
+  <div id="asyncapi"></div>
+
+  <script src="https://unpkg.com/@asyncapi/react-component@1.4.2/browser/standalone/index.js"></script>
+  <script>
+    const schema = {
+      "asyncapi": "2.6.0",
+      "id": "urn:com:pixpro:notification-service",
+      "info": {
+        "title": "PixPro Notification Hub (WSS & Redis Backplane)",
+        "version": "1.0.0",
+        "description": "Especificação AsyncAPI do Hub de Notificações WebSocket Seguro (WSS) do PixPro. Suporta múltiplas instâncias concorrentes escaláveis sincronizadas via Redis Pub/Sub Backplane (`pixpro:notifications:backplane`) e autenticação via token JWT.",
+        "contact": {
+          "name": "Equipe PixPro - Grupo 3"
+        },
+        "license": {
+          "name": "ISC"
+        }
+      },
+      "defaultContentType": "application/json",
+      "servers": {
+        "notificationHub": {
+          "url": "wss://{host}:{port}",
+          "protocol": "wss",
+          "description": "Cluster do Notification Service (Hub WSS) com suporte a múltiplas instâncias (ex: notification-service-1 na porta 4000 e notification-service-2 na porta 4001) interligadas pelo Redis Backplane.",
+          "variables": {
+            "host": {
+              "default": "localhost",
+              "description": "Host do Hub de Notificações WebSocket."
+            },
+            "port": {
+              "default": "4000",
+              "enum": ["4000", "4001"],
+              "description": "Porta da instância do Hub WSS (4000 para instância 1, 4001 para instância 2)."
+            }
+          },
+          "security": [
+            { "jwtAuth": [] }
+          ]
+        }
+      },
+      "channels": {
+        "notifications/image-status": {
+          "description": "Canal de entrega em tempo real das notificações de processamento de imagens consumidas do RabbitMQ e propagadas entre instâncias via Redis Backplane (`pixpro:notifications:backplane`).",
+          "subscribe": {
+            "operationId": "receiveImageStatusNotification",
+            "summary": "Recebe notificações de mudança de status de processamento de imagem (PROCESSED / COMPLETED / FAILED).",
+            "message": {
+              "$ref": "#/components/messages/ImageStatusNotification"
+            }
+          }
+        },
+        "notifications/heartbeat": {
+          "description": "Canal de controle de conexão WebSocket para verificação de integridade (PING/PONG) e disparo de mensagens/broadcast entre instâncias do hub.",
+          "publish": {
+            "operationId": "sendClientCommand",
+            "summary": "Envia comando de heartbeat (PING) ou solicitação de broadcast (BROADCAST/NOTIFY) ao Hub WSS.",
+            "message": {
+              "$ref": "#/components/messages/ClientCommandMessage"
+            }
+          },
+          "subscribe": {
+            "operationId": "receiveHubControlMessage",
+            "summary": "Recebe confirmação de conexão (WELCOME), resposta de heartbeat (PONG) ou confirmação de publicação no backplane (PUBLISHED_ACK).",
+            "message": {
+              "$ref": "#/components/messages/HubControlMessage"
+            }
+          }
+        }
+      },
+      "components": {
+        "securitySchemes": {
+          "jwtAuth": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": "Autenticação JWT (HS256) validada no handshake de upgrade WSS. O token pode ser enviado no header `Authorization: Bearer <token>` ou na query string `/?token=<token>`. A sessão também é verificada na blacklist do Redis (`pixpro:auth:revoked:<jti>`)."
+          }
+        },
+        "messages": {
+          "ImageStatusNotification": {
+            "name": "ImageStatusNotification",
+            "title": "Notificação de Status de Imagem",
+            "summary": "Evento enviado ao cliente quando uma imagem termina de ser processada pela IA ou falha.",
+            "contentType": "application/json",
+            "payload": {
+              "$ref": "#/components/schemas/ImageStatusNotificationPayload"
+            }
+          },
+          "ClientCommandMessage": {
+            "name": "ClientCommandMessage",
+            "title": "Comando do Cliente WebSocket",
+            "summary": "Mensagem enviada pelo cliente autenticado para PING ou publicação no Redis Backplane.",
+            "contentType": "application/json",
+            "payload": {
+              "$ref": "#/components/schemas/ClientCommandPayload"
+            }
+          },
+          "HubControlMessage": {
+            "name": "HubControlMessage",
+            "title": "Mensagem de Controle do Hub WSS",
+            "summary": "Resposta de handshake (WELCOME), keep-alive (PONG) ou confirmação de publicação (PUBLISHED_ACK).",
+            "contentType": "application/json",
+            "payload": {
+              "$ref": "#/components/schemas/HubControlPayload"
+            }
+          }
+        },
+        "schemas": {
+          "ImageStatusNotificationPayload": {
+            "type": "object",
+            "required": ["type", "event", "data", "timestamp"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["NOTIFICATION"],
+                "description": "Tipo fixo da mensagem de notificação."
+              },
+              "event": {
+                "type": "string",
+                "example": "ImageProcessed",
+                "description": "Nome do evento de domínio originado no pipeline assíncrono."
+              },
+              "data": {
+                "type": "object",
+                "required": ["imageId", "status", "message"],
+                "properties": {
+                  "imageId": {
+                    "type": "string",
+                    "example": "img_17300000_a1b2c3d4",
+                    "description": "Identificador único da imagem processada."
+                  },
+                  "userId": {
+                    "type": "string",
+                    "example": "usr_ana_martins_01",
+                    "description": "Identificador do usuário proprietário da imagem."
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["PENDING", "PROCESSED", "COMPLETED", "FAILED"],
+                    "description": "Estado atual do processamento da imagem."
+                  },
+                  "processedStorageUrl": {
+                    "type": "string",
+                    "format": "uri",
+                    "nullable": true,
+                    "example": "http://localhost:9000/pixpro-storage/processed/u1/img_1_out.jpg",
+                    "description": "URL pública da imagem otimizada no storage S3/SeaweedFS."
+                  },
+                  "message": {
+                    "type": "string",
+                    "example": "Sua imagem foi processada com sucesso!",
+                    "description": "Mensagem descritiva para exibição na interface do usuário."
+                  }
+                }
+              },
+              "backplane": {
+                "$ref": "#/components/schemas/BackplaneMetadata"
+              },
+              "timestamp": {
+                "type": "integer",
+                "example": 1794450000000,
+                "description": "Timestamp Unix em milissegundos da geração do evento."
+              }
+            }
+          },
+          "ClientCommandPayload": {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["PING", "BROADCAST", "NOTIFY", "MESSAGE"],
+                "description": "Tipo de comando enviado pelo cliente ao Hub WSS."
+              },
+              "targetUserId": {
+                "type": "string",
+                "nullable": true,
+                "example": "usr_destinatario_instancia_2",
+                "description": "ID do usuário de destino (opcional; quando omitido em BROADCAST, propaga para todos)."
+              },
+              "event": {
+                "type": "string",
+                "example": "CrossInstanceBackplaneTest",
+                "description": "Nome do evento personalizado a ser propagado via Redis Backplane."
+              },
+              "message": {
+                "type": "string",
+                "example": "Evento enviado pela Instância 1 e propagado via Redis Pub/Sub!",
+                "description": "Conteúdo textual da mensagem."
+              }
+            }
+          },
+          "HubControlPayload": {
+            "type": "object",
+            "required": ["type", "instanceId"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["WELCOME", "PONG", "PUBLISHED_ACK"],
+                "description": "Tipo de resposta de controle emitida pelo Hub WSS."
+              },
+              "instanceId": {
+                "type": "string",
+                "example": "notification-service-1",
+                "description": "Identificador da instância do Hub WSS que processou a conexão."
+              },
+              "userId": {
+                "type": "string",
+                "example": "usr_ana_martins_01",
+                "description": "ID do usuário autenticado via JWT."
+              },
+              "eventId": {
+                "type": "string",
+                "format": "uuid",
+                "description": "UUID do evento publicado no Redis Backplane (presente em PUBLISHED_ACK)."
+              },
+              "channel": {
+                "type": "string",
+                "example": "pixpro:notifications:backplane",
+                "description": "Canal Redis Pub/Sub utilizado no backplane."
+              },
+              "message": {
+                "type": "string",
+                "example": "Olá, cliente! Conexão WSS estabelecida na instância notification-service-1."
+              },
+              "timestamp": {
+                "type": "integer",
+                "example": 1794450000000
+              }
+            }
+          },
+          "BackplaneMetadata": {
+            "type": "object",
+            "description": "Metadados de rastreamento de propagação entre instâncias via Redis Pub/Sub Backplane.",
+            "required": ["eventId", "originInstance", "deliveredByInstance", "channel", "timestamp"],
+            "properties": {
+              "eventId": {
+                "type": "string",
+                "format": "uuid",
+                "example": "4c01b370-06d0-44f9-825c-843fea2fd43e"
+              },
+              "originInstance": {
+                "type": "string",
+                "example": "notification-service-1",
+                "description": "Instância do Hub que publicou originalmente o evento no Redis."
+              },
+              "deliveredByInstance": {
+                "type": "string",
+                "example": "notification-service-2",
+                "description": "Instância do Hub que recebeu o evento do Redis e entregou ao cliente WebSocket local."
+              },
+              "channel": {
+                "type": "string",
+                "example": "pixpro:notifications:backplane"
+              },
+              "timestamp": {
+                "type": "integer",
+                "example": 1794450000000
+              }
+            }
+          }
+        }
+      }
+    };
+
+    AsyncApiStandalone.render({
+      schema,
+      config: {
+        show: {
+          sidebar: true,
+          info: true,
+          servers: true,
+          operations: true,
+          messages: true,
+          schemas: true,
+          errors: true
+        },
+        expand: {
+          messageExamples: true
+        },
+        sidebar: {
+          showServers: 'byDefault',
+          showOperations: 'byDefault'
+        }
+      }
+    }, document.getElementById('asyncapi'));
+  </script>
+</body>
+</html>

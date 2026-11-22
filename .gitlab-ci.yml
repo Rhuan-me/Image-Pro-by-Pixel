@@ -90,9 +90,12 @@ test-image-processing:
 
 validate-asyncapi:
   stage: test
+  image:
+    name: asyncapi/cli:latest
+    entrypoint: [""]
   timeout: 5 minutes
   script:
-    - npx --yes @asyncapi/cli validate asyncapi.yaml
+    - asyncapi validate asyncapi.yaml
 
 build-and-push-images:
   stage: deploy
