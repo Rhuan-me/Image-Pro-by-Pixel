@@ -88,6 +88,12 @@ test-image-processing:
       - backend/services/image-processing-service/coverage/
     expire_in: 1 week
 
+validate-asyncapi:
+  stage: test
+  timeout: 5 minutes
+  script:
+    - npx --yes @asyncapi/cli validate asyncapi.yaml
+
 build-and-push-images:
   stage: deploy
   image: docker:27.5.1-cli
